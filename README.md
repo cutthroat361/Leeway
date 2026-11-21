@@ -4,6 +4,10 @@ Your Claude usage limits in the Mac menu bar, so you don't have to open claude.a
 
 Leeway shows the same numbers as that page: the current 5-hour session and the weekly limit, each with its reset time. It also tells you when you're on pace to run out before a limit resets.
 
+<p align="center">
+  <img src="docs/screenshots/popover.png" width="420" alt="Leeway popover showing the current session at 10% used and the weekly limit at 58% used, with reset times, pace ticks and a 24-hour history chart">
+</p>
+
 Runs on macOS 11 Big Sur and newer, on both Apple Silicon and Intel Macs (one universal app).
 
 ## What you get
@@ -14,8 +18,25 @@ Runs on macOS 11 Big Sur and newer, on both Apple Silicon and Intel Macs (one un
 - **Alerts.** At 75%, at 90%, when you hit a limit, when you're on pace to run out, and when your session resets after you hit 90%. Each fires once per limit window.
 - **History chart.** Session and weekly usage over the last 24 hours, 7 days or 30 days.
 - **Open at login**, refresh every 1 to 30 minutes, plus an extra refresh when your Mac wakes up. Right-click the menu bar item for Refresh, Settings and Quit.
+- **Times match your Mac.** Reset times follow the 12-hour or 24-hour setting in System Settings > General > Date & Time.
+
+## Screenshots
+
+| Account | Menu bar |
+| :---: | :---: |
+| <img src="docs/screenshots/account.png" width="400" alt="Settings, Account tab: choose Claude Code login, a claude.ai sign-in window or a pasted session key"> | <img src="docs/screenshots/menu-bar.png" width="400" alt="Settings, Menu bar tab: five display styles and color options"> |
+| **Alerts** | **General** |
+| <img src="docs/screenshots/alerts.png" width="400" alt="Settings, Alerts tab: notifications at 75%, 90%, at the limit, on pace and on session reset"> | <img src="docs/screenshots/general.png" width="400" alt="Settings, General tab: refresh interval, open at login and clear history"> |
 
 ## Install
+
+### Download
+
+Get `Leeway-x.y.z.zip` from the [latest release](https://github.com/cutthroat361/Leeway/releases/latest), unzip it and move Leeway to Applications. It runs on Apple Silicon and Intel Macs.
+
+The download isn't signed with an Apple Developer ID yet, so macOS blocks it the first time. Open it once, then go to System Settings > Privacy & Security and click Open Anyway.
+
+### Build it yourself
 
 You need Apple's command line tools. If you use Homebrew you already have them. If not, run `xcode-select --install` once.
 
