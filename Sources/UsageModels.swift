@@ -182,21 +182,33 @@ enum UsageParser {
 
     static func date(_ item: [String: Any], _ keys: [String]) -> Date? {
         for key in keys {
-            if let value = item[key] as? String, let parsed = parseDate(value) { return parsed }
+            if let value = item[key] as? String, let parsed = parseDate(value) { return roundedToMinute(parsed) }
             if let value = item[key] as? NSNumber {
                 let seconds = value.doubleValue
-                return Date(timeIntervalSince1970: seconds > 1e12 ? seconds / 1000 : seconds)
+                return roundedToMinute(Date(timeIntervalSince1970: seconds > 1e12 ? seconds / 1000 : seconds))
             }
         }
         return nil
     }
 
+    /// Reset times arrive to the second and drift a little between refreshes
+    /// (19:59:59 one time, 20:00:01 the next). Round so they read like claude.ai.
+    static func roundedToMinute(_ date: Date) -> Date {
+        let seconds = date.timeIntervalSince1970
+        return Date(timeIntervalSince1970: (seconds / 60).rounded() * 60)
+    }
+
     static func parseDate(_ raw: String) -> Date? {
-        // Drop fractional seconds; older macOS versions choke on 6 digits.
+        // Parse without fractional seconds (older macOS versions choke on 6 digits),
+        // then add them back so rounding to the minute goes the right way.
+        var fraction = 0.0
+        if let range = raw.range(of: "\\.[0-9]+", options: .regularExpression) {
+            fraction = Double("0" + String(raw[range])) ?? 0
+        }
         let cleaned = raw.replacingOccurrences(of: "\\.[0-9]+", with: "", options: .regularExpression)
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime]
-        return formatter.date(from: cleaned)
+        return formatter.date(from: cleaned)?.addingTimeInterval(fraction)
     }
 }
 
