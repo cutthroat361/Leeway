@@ -213,23 +213,36 @@ enum UsageParser {
 }
 
 enum TextFormat {
-    private static let timeFormatter: DateFormatter = {
+    // Formatters are made fresh on each call (it's only a few times a minute), so a
+    // change to the 12-hour / 24-hour setting or the region shows up right away.
+    // timeStyle .short is what macOS uses for its own clock, so it follows the
+    // "24-hour time" switch in System Settings > General > Date & Time.
+    private static func formatter(_ configure: (DateFormatter) -> Void) -> DateFormatter {
         let formatter = DateFormatter()
-        formatter.setLocalizedDateFormatFromTemplate("jmm")
+        formatter.locale = Locale.autoupdatingCurrent
+        formatter.timeZone = TimeZone.autoupdatingCurrent
+        configure(formatter)
         return formatter
-    }()
+    }
 
-    private static let dayTimeFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.setLocalizedDateFormatFromTemplate("EEEjmm")
-        return formatter
-    }()
+    /// "8:00 PM" or "20:00", following System Settings.
+    static func time(_ date: Date) -> String {
+        return formatter {
+            $0.dateStyle = .none
+            $0.timeStyle = .short
+        }.string(from: date)
+    }
 
-    private static let dayFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.setLocalizedDateFormatFromTemplate("MMMd")
-        return formatter
-    }()
+    /// "Sun 11:00 AM" or "Sun 11:00".
+    private static func dayAndTime(_ date: Date) -> String {
+        let weekday = formatter { $0.setLocalizedDateFormatFromTemplate("EEE") }.string(from: date)
+        return "\(weekday) \(time(date))"
+    }
+
+    /// "Nov 28".
+    private static func day(_ date: Date) -> String {
+        return formatter { $0.setLocalizedDateFormatFromTemplate("MMMd") }.string(from: date)
+    }
 
     private static let relativeFormatter: RelativeDateTimeFormatter = {
         let formatter = RelativeDateTimeFormatter()
@@ -241,15 +254,15 @@ enum TextFormat {
         return "\(Int(value.rounded()))%"
     }
 
-    /// "8:00 PM" today, "Sun 11:00 AM" within the week, "Nov 28" further out.
+    /// "8:00 PM" / "20:00" today, "Sun 11:00 AM" / "Sun 11:00" within the week, "Nov 28" further out.
     static func when(_ date: Date, now: Date = Date()) -> String {
         if Calendar.current.isDate(date, inSameDayAs: now) {
-            return timeFormatter.string(from: date)
+            return time(date)
         }
         if abs(date.timeIntervalSince(now)) < 6 * 86400 {
-            return dayTimeFormatter.string(from: date)
+            return dayAndTime(date)
         }
-        return dayFormatter.string(from: date)
+        return day(date)
     }
 
     /// Matches the wording on the claude.ai usage page.

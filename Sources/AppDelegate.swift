@@ -43,6 +43,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                                           name: NSWorkspace.didWakeNotification,
                                                           object: nil)
 
+        // Redraw right away when the 12/24-hour setting, region or time zone changes.
+        for name in [NSLocale.currentLocaleDidChangeNotification, .NSSystemTimeZoneDidChange] {
+            NotificationCenter.default.addObserver(self,
+                                                   selector: #selector(clockFormatDidChange),
+                                                   name: name,
+                                                   object: nil)
+        }
+
         scheduleTimers()
         updateStatusItem()
         store.refresh()
@@ -177,6 +185,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             clock.tolerance = 5
             RunLoop.main.add(clock, forMode: .common)
             clockTimer = clock
+        }
+    }
+
+    @objc private func clockFormatDidChange() {
+        DispatchQueue.main.async { [weak self] in
+            self?.store.now = Date()
+            self?.updateStatusItem()
         }
     }
 
