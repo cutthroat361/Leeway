@@ -4,6 +4,8 @@ enum AppInfo {
     static var version: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
     }
+
+    static let projectURL = "https://github.com/cutthroat361/Leeway"
 }
 
 /// One usage limit, for example the 5-hour session or the weekly limit.
@@ -266,7 +268,7 @@ enum TextFormat {
 
     private static let relativeFormatter: RelativeDateTimeFormatter = {
         let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .full
+        formatter.unitsStyle = .short  // "12 min. ago", so the popover footer fits on one line
         return formatter
     }()
 

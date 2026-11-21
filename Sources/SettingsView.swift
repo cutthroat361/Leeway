@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct SettingsActions {
@@ -7,24 +8,95 @@ struct SettingsActions {
     let refresh: () -> Void
 }
 
+enum SettingsTab: String, CaseIterable, Identifiable {
+    case account = "Account"
+    case menuBar = "Menu bar"
+    case alerts = "Alerts"
+    case general = "General"
+    var id: String { rawValue }
+}
+
+/// Reports the height Settings needs, so the window can fit the selected tab.
+private struct SettingsHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
 struct SettingsView: View {
+    static let width: CGFloat = 560
+
     @ObservedObject var store: UsageStore
     @ObservedObject var settings: AppSettings
     let actions: SettingsActions
+    /// Called with the height the window's content needs for the selected tab.
+    let onHeightChange: (CGFloat) -> Void
+
+    // View state is declared without the @State attribute on purpose: newer Apple
+    // command line tools treat @State as a macro whose plugin only ships with Xcode.
+    private let _tab = State<SettingsTab>(initialValue: .account)
+    private var tab: SettingsTab {
+        get { _tab.wrappedValue }
+        nonmutating set { _tab.wrappedValue = newValue }
+    }
 
     var body: some View {
-        TabView {
-            AccountTab(store: store, settings: settings, actions: actions)
-                .tabItem { Text("Account") }
-            MenuBarTab(settings: settings)
-                .tabItem { Text("Menu bar") }
-            AlertsTab(settings: settings)
-                .tabItem { Text("Alerts") }
-            GeneralTab(store: store, settings: settings)
-                .tabItem { Text("General") }
+        VStack(spacing: 0) {
+            Picker("Settings section", selection: _tab.projectedValue) {
+                ForEach(SettingsTab.allCases) { tab in
+                    Text(tab.rawValue).tag(tab)
+                }
+            }
+            .pickerStyle(SegmentedPickerStyle())
+            .labelsHidden()
+            .fixedSize()
+            .padding(.top, 14)
+
+            selectedTab
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 24)
+                .padding(.top, 18)
+                .padding(.bottom, 20)
+
+            Divider()
+            footer
         }
-        .padding(20)
-        .frame(width: 560, height: 500)
+        .frame(width: SettingsView.width)
+        .fixedSize(horizontal: false, vertical: true)
+        .background(GeometryReader { proxy in
+            Color.clear.preference(key: SettingsHeightKey.self, value: proxy.size.height)
+        })
+        .onPreferenceChange(SettingsHeightKey.self) { height in
+            onHeightChange(height)
+        }
+    }
+
+    @ViewBuilder private var selectedTab: some View {
+        switch tab {
+        case .account: AccountTab(store: store, settings: settings, actions: actions)
+        case .menuBar: MenuBarTab(settings: settings)
+        case .alerts: AlertsTab(settings: settings)
+        case .general: GeneralTab(store: store, settings: settings)
+        }
+    }
+
+    private var footer: some View {
+        HStack {
+            Text("Leeway \(AppInfo.version)")
+                .font(.system(size: 11))
+                .foregroundColor(.secondary)
+            Spacer()
+            Button("View on GitHub") {
+                if let url = URL(string: AppInfo.projectURL) {
+                    NSWorkspace.shared.open(url)
+                }
+            }
+            .buttonStyle(LinkButtonStyle())
+            .font(.system(size: 11))
+        }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 10)
     }
 }
 
@@ -75,7 +147,6 @@ struct AccountTab: View {
             }
 
             connectionStatus
-            Spacer()
         }
         .onAppear {
             checkClaudeCode()
@@ -213,7 +284,6 @@ struct MenuBarTab: View {
             Toggle("Show the gauge icon next to the numbers", isOn: $settings.showIcon)
                 .disabled(settings.barStyle == .miniBars)
             Toggle("Turn numbers orange at 75% and red at 90%", isOn: $settings.colorWhenHigh)
-            Spacer()
         }
     }
 }
@@ -269,7 +339,6 @@ struct AlertsTab: View {
                     .foregroundColor(.orange)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            Spacer()
         }
     }
 }
@@ -326,7 +395,7 @@ struct GeneralTab: View {
             Divider()
 
             VStack(alignment: .leading, spacing: 6) {
-                Text("Leeway \(AppInfo.version)")
+                Text("About Leeway")
                     .font(.system(size: 12, weight: .semibold))
                 Text("Reads your limits straight from claude.ai or Anthropic. Your sign-in stays in the macOS Keychain and your history stays on this Mac.")
                 Text("Leeway isn't made by or affiliated with Anthropic. It reads the same unofficial endpoint as the claude.ai usage page, so a change on their side can break it until Leeway is updated.")
@@ -334,8 +403,6 @@ struct GeneralTab: View {
             .font(.system(size: 11))
             .foregroundColor(.secondary)
             .fixedSize(horizontal: false, vertical: true)
-
-            Spacer()
         }
     }
 }

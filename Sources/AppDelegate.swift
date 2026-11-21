@@ -216,17 +216,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 saveSessionKey: { [weak self] key in self?.saveSessionKey(key) },
                 signOut: { [weak self] in self?.signOut() },
                 refresh: { [weak self] in self?.store.refresh() })
-            let view = SettingsView(store: store, settings: settings, actions: actions)
+            let view = SettingsView(store: store, settings: settings, actions: actions,
+                                    onHeightChange: { [weak self] height in
+                                        DispatchQueue.main.async { self?.fitSettingsWindow(toHeight: height) }
+                                    })
             let controller = NSHostingController(rootView: AnyView(view))
+            if #available(macOS 13.0, *) {
+                // The window is sized by fitSettingsWindow, so it can animate between tabs.
+                controller.sizingOptions = []
+            }
             let window = NSWindow(contentViewController: controller)
             window.title = "Leeway Settings"
             window.styleMask = [.titled, .closable, .miniaturizable]
             window.isReleasedWhenClosed = false
+            let fitted = controller.sizeThatFits(in: NSSize(width: SettingsView.width, height: 2000))
+            window.setContentSize(NSSize(width: SettingsView.width, height: max(200, ceil(fitted.height))))
             window.center()
             settingsWindow = window
         }
         NSApp.activate(ignoringOtherApps: true)
         settingsWindow?.makeKeyAndOrderFront(nil)
+    }
+
+    /// Fits the Settings window to the selected tab, keeping its top edge in place.
+    private func fitSettingsWindow(toHeight height: CGFloat) {
+        guard let window = settingsWindow, height > 0 else { return }
+        let content = window.contentRect(forFrameRect: window.frame)
+        let size = NSSize(width: SettingsView.width, height: ceil(height))
+        guard abs(content.height - size.height) > 0.5 || abs(content.width - size.width) > 0.5 else { return }
+        let newContent = NSRect(x: content.minX, y: content.maxY - size.height,
+                                width: size.width, height: size.height)
+        window.setFrame(window.frameRect(forContentRect: newContent), display: true, animate: window.isVisible)
     }
 
     private func startBrowserSignIn() {

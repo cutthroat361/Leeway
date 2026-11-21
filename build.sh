@@ -13,7 +13,7 @@ set -euo pipefail
 
 APP_NAME="Leeway"
 BUNDLE_ID="${BUNDLE_ID:-io.github.cutthroat361.leeway}"
-VERSION="${VERSION:-1.0.0}"
+VERSION="${VERSION:-1.1.0}"
 BUILD_NUMBER="${BUILD_NUMBER:-$(date +%Y%m%d%H%M)}"
 MIN_MACOS="11.0"
 

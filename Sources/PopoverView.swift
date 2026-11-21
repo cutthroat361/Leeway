@@ -153,8 +153,9 @@ struct PopoverView: View {
 
     private var footer: some View {
         HStack {
-            Text(TextFormat.updatedAgo(store.lastUpdated, now: store.now))
+            Text("Leeway \(AppInfo.version) · \(TextFormat.updatedAgo(store.lastUpdated, now: store.now))")
                 .font(.system(size: 11))
+                .lineLimit(1)
                 .foregroundColor(.secondary)
             Spacer()
             Button("Settings", action: onOpenSettings)
