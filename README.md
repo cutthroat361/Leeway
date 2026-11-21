@@ -25,7 +25,9 @@ In Terminal, from the Leeway folder:
 bash build.sh --install
 ```
 
-That compiles the app for Apple Silicon and Intel, copies it to `/Applications`, and opens it. Look for the gauge in your menu bar.
+That compiles the app, copies it to `/Applications`, and opens it. Look for the gauge in your menu bar.
+
+Apple's newest command line tools (macOS 27 and later) can no longer build for Intel Macs, so on those the build is for Apple Silicon only. The downloads on the GitHub releases page are always universal.
 
 ## Connect your account
 

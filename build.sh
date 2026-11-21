@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Builds Leeway.app as one universal app (Apple Silicon + Intel) for macOS 11 Big Sur and newer.
+# Builds Leeway.app for macOS 11 Big Sur and newer: one universal app (Apple Silicon + Intel)
+# when your Apple tools can still build for Intel, otherwise Apple Silicon only.
 #
 #   bash build.sh              build into ./build
 #   bash build.sh --install    build, copy to /Applications, and open it
@@ -30,21 +31,36 @@ SDK="$(xcrun --sdk macosx --show-sdk-path)"
 rm -rf "$BUILD"
 mkdir -p "$BUILD/obj" "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
-for ARCH in arm64 x86_64; do
-  echo "Compiling for $ARCH..."
+compile() {
   xcrun swiftc \
     -O \
     -swift-version 5 \
     -sdk "$SDK" \
-    -target "$ARCH-apple-macos$MIN_MACOS" \
+    -target "$1-apple-macos$MIN_MACOS" \
     -module-name "$APP_NAME" \
     "$ROOT"/Sources/*.swift \
-    -o "$BUILD/obj/$APP_NAME-$ARCH"
-done
+    -o "$BUILD/obj/$APP_NAME-$1"
+}
 
-echo "Combining into one universal app..."
-lipo -create "$BUILD/obj/$APP_NAME-arm64" "$BUILD/obj/$APP_NAME-x86_64" \
-  -output "$APP/Contents/MacOS/$APP_NAME"
+echo "Compiling for Apple Silicon (arm64)..."
+compile arm64
+
+# Apple's newest tools (macOS 27 and later) can't build for Intel Macs any more.
+# Then the app is built for Apple Silicon only, unless REQUIRE_UNIVERSAL=1.
+echo "Compiling for Intel (x86_64)..."
+if compile x86_64 > "$BUILD/obj/x86_64.log" 2>&1; then
+  echo "Combining into one universal app..."
+  lipo -create "$BUILD/obj/$APP_NAME-arm64" "$BUILD/obj/$APP_NAME-x86_64" \
+    -output "$APP/Contents/MacOS/$APP_NAME"
+elif [[ "${REQUIRE_UNIVERSAL:-0}" == "1" ]]; then
+  cat "$BUILD/obj/x86_64.log"
+  echo "The Intel build failed and REQUIRE_UNIVERSAL=1 is set. Stopping."
+  exit 1
+else
+  echo "These Apple tools can't build for Intel Macs, so this build is for Apple Silicon only."
+  echo "(That's fine for your own Mac. GitHub releases are built for both.)"
+  cp "$BUILD/obj/$APP_NAME-arm64" "$APP/Contents/MacOS/$APP_NAME"
+fi
 rm -rf "$BUILD/obj"
 
 if [[ -f "$ROOT/Resources/AppIcon.icns" ]]; then

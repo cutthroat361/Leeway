@@ -11,11 +11,14 @@ permissions:
 
 jobs:
   build:
-    runs-on: macos-14
+    # macOS 15 runners still build for Intel Macs. GitHub plans to retire them in fall 2027.
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
 
       - name: Build universal app
+        env:
+          REQUIRE_UNIVERSAL: "1"
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             export VERSION="${GITHUB_REF_NAME#v}"
