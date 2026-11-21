@@ -218,18 +218,38 @@ enum TextFormat {
     // timeStyle .short is what macOS uses for its own clock, so it follows the
     // "24-hour time" switch in System Settings > General > Date & Time.
     private static func formatter(_ configure: (DateFormatter) -> Void) -> DateFormatter {
+        // The default locale is the user's own, including their 12/24-hour choice.
         let formatter = DateFormatter()
-        formatter.locale = Locale.autoupdatingCurrent
         formatter.timeZone = TimeZone.autoupdatingCurrent
         configure(formatter)
         return formatter
     }
 
+    /// The "24-hour time" switch in System Settings is saved as an override on top of
+    /// the region's default (24-hour for Ukraine or Germany, 12-hour for the US).
+    /// Read it directly so the override always wins.
+    private enum HourCycle { case twelve, twentyFour, regionDefault }
+
+    private static var hourCycle: HourCycle {
+        let defaults = UserDefaults.standard
+        if defaults.bool(forKey: "AppleICUForce24HourTime") { return .twentyFour }
+        if defaults.bool(forKey: "AppleICUForce12HourTime") { return .twelve }
+        return .regionDefault
+    }
+
     /// "8:00 PM" or "20:00", following System Settings.
     static func time(_ date: Date) -> String {
+        let cycle = hourCycle
         return formatter {
-            $0.dateStyle = .none
-            $0.timeStyle = .short
+            switch cycle {
+            case .twelve:
+                $0.setLocalizedDateFormatFromTemplate("hmma")
+            case .twentyFour:
+                $0.setLocalizedDateFormatFromTemplate("HHmm")
+            case .regionDefault:
+                $0.dateStyle = .none
+                $0.timeStyle = .short
+            }
         }.string(from: date)
     }
 

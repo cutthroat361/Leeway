@@ -44,12 +44,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                                           object: nil)
 
         // Redraw right away when the 12/24-hour setting, region or time zone changes.
+        // (The 30-second clock timer catches anything these miss.)
         for name in [NSLocale.currentLocaleDidChangeNotification, .NSSystemTimeZoneDidChange] {
             NotificationCenter.default.addObserver(self,
                                                    selector: #selector(clockFormatDidChange),
                                                    name: name,
                                                    object: nil)
         }
+        DistributedNotificationCenter.default().addObserver(self,
+                                                            selector: #selector(clockFormatDidChange),
+                                                            name: Notification.Name("AppleTimePreferencesChangedNotification"),
+                                                            object: nil)
 
         scheduleTimers()
         updateStatusItem()
