@@ -21,7 +21,13 @@ struct PopoverView: View {
     let onOpenSettings: () -> Void
     let onQuit: () -> Void
 
-    @State private var range: HistoryRange = .day
+    // View state is declared without the @State attribute on purpose: newer Apple
+    // command line tools treat @State as a macro whose plugin only ships with Xcode.
+    private let _range = State<HistoryRange>(initialValue: .day)
+    private var range: HistoryRange {
+        get { _range.wrappedValue }
+        nonmutating set { _range.wrappedValue = newValue }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -116,7 +122,7 @@ struct PopoverView: View {
                 Text("History")
                     .font(.system(size: 12, weight: .semibold))
                 Spacer()
-                Picker("History range", selection: $range) {
+                Picker("History range", selection: _range.projectedValue) {
                     ForEach(HistoryRange.allCases) { option in
                         Text(option.title).tag(option)
                     }

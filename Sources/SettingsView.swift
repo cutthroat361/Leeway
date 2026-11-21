@@ -35,9 +35,23 @@ struct AccountTab: View {
     @ObservedObject var settings: AppSettings
     let actions: SettingsActions
 
-    @State private var keyInput = ""
-    @State private var claudeCodeFound: Bool? = nil
-    @State private var showKeySteps = false
+    // View state is declared without the @State attribute on purpose: newer Apple
+    // command line tools treat @State as a macro whose plugin only ships with Xcode.
+    private let _keyInput = State<String>(initialValue: "")
+    private var keyInput: String {
+        get { _keyInput.wrappedValue }
+        nonmutating set { _keyInput.wrappedValue = newValue }
+    }
+    private let _claudeCodeFound = State<Bool?>(initialValue: nil)
+    private var claudeCodeFound: Bool? {
+        get { _claudeCodeFound.wrappedValue }
+        nonmutating set { _claudeCodeFound.wrappedValue = newValue }
+    }
+    private let _showKeySteps = State<Bool>(initialValue: false)
+    private var showKeySteps: Bool {
+        get { _showKeySteps.wrappedValue }
+        nonmutating set { _showKeySteps.wrappedValue = newValue }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -103,7 +117,7 @@ struct AccountTab: View {
             Text("Paste the sessionKey cookie from claude.ai. Leeway keeps it in your macOS Keychain.")
                 .fixedSize(horizontal: false, vertical: true)
             HStack {
-                SecureField("sk-ant-sid01-…", text: $keyInput)
+                SecureField("sk-ant-sid01-…", text: _keyInput.projectedValue)
                 Button("Save key") {
                     actions.saveSessionKey(keyInput)
                     keyInput = ""
@@ -208,7 +222,13 @@ struct MenuBarTab: View {
 
 struct AlertsTab: View {
     @ObservedObject var settings: AppSettings
-    @State private var permissionNote = ""
+    // View state is declared without the @State attribute on purpose: newer Apple
+    // command line tools treat @State as a macro whose plugin only ships with Xcode.
+    private let _permissionNote = State<String>(initialValue: "")
+    private var permissionNote: String {
+        get { _permissionNote.wrappedValue }
+        nonmutating set { _permissionNote.wrappedValue = newValue }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -260,8 +280,18 @@ struct GeneralTab: View {
     @ObservedObject var store: UsageStore
     @ObservedObject var settings: AppSettings
 
-    @State private var launchAtLogin = LoginItem.isEnabled
-    @State private var loginNote = ""
+    // View state is declared without the @State attribute on purpose: newer Apple
+    // command line tools treat @State as a macro whose plugin only ships with Xcode.
+    private let _launchAtLogin = State<Bool>(initialValue: LoginItem.isEnabled)
+    private var launchAtLogin: Bool {
+        get { _launchAtLogin.wrappedValue }
+        nonmutating set { _launchAtLogin.wrappedValue = newValue }
+    }
+    private let _loginNote = State<String>(initialValue: "")
+    private var loginNote: String {
+        get { _loginNote.wrappedValue }
+        nonmutating set { _loginNote.wrappedValue = newValue }
+    }
 
     static func label(forMinutes minutes: Int) -> String {
         minutes == 1 ? "1 minute" : "\(minutes) minutes"
