@@ -17,6 +17,9 @@ BUNDLE_ID="${BUNDLE_ID:-io.github.cutthroat361.leeway}"
 VERSION="${VERSION:-1.3.0}"
 BUILD_NUMBER="${BUILD_NUMBER:-$(date +%Y%m%d%H%M)}"
 MIN_MACOS="11.0"
+# The widget needs macOS 14 Sonoma (desktop widgets). Built for an older macOS, it crashes on
+# start in newer versions, inside Apple's extension startup code.
+WIDGET_MIN_MACOS="14.0"
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 BUILD="$ROOT/build"
@@ -30,6 +33,8 @@ if ! xcrun --find swiftc >/dev/null 2>&1; then
   exit 1
 fi
 SDK="$(xcrun --sdk macosx --show-sdk-path)"
+SDK_VERSION="$(xcrun --sdk macosx --show-sdk-version)"
+SDK_BUILD="$(xcrun --sdk macosx --show-sdk-build-version 2>/dev/null || echo unknown)"
 
 rm -rf "$BUILD"
 mkdir -p "$BUILD/obj" "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APPEX/Contents/MacOS"
@@ -48,7 +53,7 @@ compile() {
     -O \
     -swift-version 5 \
     -sdk "$SDK" \
-    -target "$1-apple-macos$MIN_MACOS" \
+    -target "$1-apple-macos$WIDGET_MIN_MACOS" \
     -module-name "$WIDGET_NAME" \
     -parse-as-library \
     -application-extension \
@@ -127,7 +132,13 @@ cat > "$APPEX/Contents/Info.plist" <<PLIST
   <key>CFBundleShortVersionString</key><string>$VERSION</string>
   <key>CFBundleVersion</key><string>$BUILD_NUMBER</string>
   <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
-  <key>LSMinimumSystemVersion</key><string>$MIN_MACOS</string>
+  <key>CFBundleDevelopmentRegion</key><string>en</string>
+  <key>CFBundleSupportedPlatforms</key><array><string>MacOSX</string></array>
+  <key>DTPlatformName</key><string>macosx</string>
+  <key>DTPlatformVersion</key><string>$SDK_VERSION</string>
+  <key>DTSDKName</key><string>macosx$SDK_VERSION</string>
+  <key>DTSDKBuild</key><string>$SDK_BUILD</string>
+  <key>LSMinimumSystemVersion</key><string>$WIDGET_MIN_MACOS</string>
   <key>NSExtension</key>
   <dict>
     <key>NSExtensionPointIdentifier</key><string>com.apple.widgetkit-extension</string>

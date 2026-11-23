@@ -230,13 +230,8 @@ enum WidgetTime {
 }
 
 extension View {
-    /// macOS 14 and later draw widgets on the desktop and need a container background;
-    /// older versions show them in Notification Center and need padding instead.
-    @ViewBuilder func widgetBackground() -> some View {
-        if #available(macOS 14.0, *) {
-            containerBackground(.fill.tertiary, for: .widget)
-        } else {
-            padding(14)
-        }
+    /// Desktop widgets (macOS 14 and later) need a container background.
+    func widgetBackground() -> some View {
+        containerBackground(.fill.tertiary, for: .widget)
     }
 }

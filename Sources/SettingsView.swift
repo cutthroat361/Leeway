@@ -313,7 +313,7 @@ struct MenuBarTab: View {
         if #available(macOS 14.0, *) {
             return "Leeway also has a widget for your desktop and Notification Center. Right-click the desktop, choose Edit Widgets, then search for Leeway."
         }
-        return "Leeway also has a widget for Notification Center. Click the date and time in the menu bar, choose Edit Widgets, then search for Leeway."
+        return "Leeway's widget needs macOS 14 Sonoma or later."
     }
 }
 
