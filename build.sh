@@ -213,6 +213,8 @@ if [[ "${1:-}" == "--install" ]]; then
   sleep 1
   rm -rf "/Applications/$APP_NAME.app"
   ditto "$APP" "/Applications/$APP_NAME.app"
+  # Stop the old widget, or macOS keeps talking to it and skips redraws for up to an hour.
+  pkill -x "$WIDGET_NAME" 2>/dev/null || true
   # Tell macOS about the widget now, so it shows up in the widget gallery right away.
   pluginkit -a "/Applications/$APP_NAME.app/Contents/PlugIns/$WIDGET_NAME.appex" 2>/dev/null || true
   open "/Applications/$APP_NAME.app"

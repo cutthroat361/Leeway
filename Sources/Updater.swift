@@ -228,7 +228,8 @@ final class Updater: ObservableObject {
     }
 
     /// Hands over to a small script that waits for Leeway to quit, swaps in the new copy
-    /// (restoring the old one if anything fails) and opens it.
+    /// (restoring the old one if anything fails), stops the old widget so macOS loads the
+    /// new one, and opens Leeway.
     private func replaceAndRelaunch(currentApp: URL, newApp: URL) {
         let script = """
         pid="$1"; new="$2"; app="$3"; old="$3.previous"
@@ -242,6 +243,7 @@ final class Updater: ObservableObject {
           fi
         fi
         xattr -dr com.apple.quarantine "$app" 2>/dev/null
+        pkill -x LeewayWidget 2>/dev/null
         open "$app"
         rm -rf "$(dirname "$(dirname "$new")")"
         """
