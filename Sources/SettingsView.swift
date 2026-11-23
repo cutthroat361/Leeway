@@ -294,10 +294,10 @@ struct AlertsTab: View {
     @ObservedObject var settings: AppSettings
     // View state is declared without the @State attribute on purpose: newer Apple
     // command line tools treat @State as a macro whose plugin only ships with Xcode.
-    private let _permissionNote = State<String>(initialValue: "")
-    private var permissionNote: String {
-        get { _permissionNote.wrappedValue }
-        nonmutating set { _permissionNote.wrappedValue = newValue }
+    private let _testResult = State<Notifier.TestResult?>(initialValue: nil)
+    private var testResult: Notifier.TestResult? {
+        get { _testResult.wrappedValue }
+        nonmutating set { _testResult.wrappedValue = newValue }
     }
 
     var body: some View {
@@ -323,22 +323,44 @@ struct AlertsTab: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             Button("Send a test notification") {
-                Notifier.shared.requestPermission { granted in
-                    if granted {
-                        permissionNote = ""
-                        Notifier.shared.post(title: "Leeway alerts are on",
-                                             body: "This is how a usage alert will look.")
-                    } else {
-                        permissionNote = "Notifications are off for Leeway. Turn them on in System Settings > Notifications > Leeway."
-                    }
-                }
+                Notifier.shared.sendTest { result in testResult = result }
             }
-            if !permissionNote.isEmpty {
-                Text(permissionNote)
-                    .font(.system(size: 11))
-                    .foregroundColor(.orange)
+            if let result = testResult {
+                testFeedback(result)
+            }
+        }
+    }
+}
+
+// MARK: Test notification feedback
+
+extension AlertsTab {
+    @ViewBuilder fileprivate func testFeedback(_ result: Notifier.TestResult) -> some View {
+        switch result {
+        case .sent:
+            Label("Test sent. No banner? A Focus such as Do Not Disturb or Sleep may be on. The test is still in Notification Center.",
+                  systemImage: "checkmark.circle.fill")
+                .font(.system(size: 11))
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        case .bannersOff:
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Test sent, but Leeway's alert style is set to None, so alerts only go to Notification Center. Choose Banners or Alerts in System Settings > Notifications > Leeway.")
                     .fixedSize(horizontal: false, vertical: true)
+                Button("Open Notification Settings") { Notifier.openNotificationSettings() }
+                    .controlSize(.small)
             }
+            .font(.system(size: 11))
+            .foregroundColor(.orange)
+        case .notAllowed:
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Notifications are off for Leeway, so nothing was sent. Turn them on in System Settings > Notifications > Leeway.")
+                    .fixedSize(horizontal: false, vertical: true)
+                Button("Open Notification Settings") { Notifier.openNotificationSettings() }
+                    .controlSize(.small)
+            }
+            .font(.system(size: 11))
+            .foregroundColor(.orange)
         }
     }
 }
@@ -348,6 +370,7 @@ struct AlertsTab: View {
 struct GeneralTab: View {
     @ObservedObject var store: UsageStore
     @ObservedObject var settings: AppSettings
+    @ObservedObject var updater: Updater = Updater.shared
 
     // View state is declared without the @State attribute on purpose: newer Apple
     // command line tools treat @State as a macro whose plugin only ships with Xcode.
@@ -394,15 +417,78 @@ struct GeneralTab: View {
 
             Divider()
 
+            updatesSection
+
+            Divider()
+
             VStack(alignment: .leading, spacing: 6) {
                 Text("About Leeway")
                     .font(.system(size: 12, weight: .semibold))
-                Text("Reads your limits straight from claude.ai or Anthropic. Your sign-in stays in the macOS Keychain and your history stays on this Mac.")
+                Text("Reads your limits straight from claude.ai or Anthropic. Your sign-in stays in the macOS Keychain and your history stays on this Mac. Update checks only ask GitHub for the latest Leeway release.")
                 Text("Leeway isn't made by or affiliated with Anthropic. It reads the same unofficial endpoint as the claude.ai usage page, so a change on their side can break it until Leeway is updated.")
             }
             .font(.system(size: 11))
             .foregroundColor(.secondary)
             .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var updatesSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Toggle("Check for Leeway updates once a day", isOn: $settings.checkForUpdates)
+            HStack(spacing: 10) {
+                updateButton
+                updateStatusText
+            }
+            if updater.availableVersion != nil {
+                Text("After updating, macOS may ask to use the Keychain again. Click Always Allow.")
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    @ViewBuilder private var updateButton: some View {
+        if let version = updater.availableVersion {
+            Button("Update to \(version) now") { updater.installUpdate() }
+        } else {
+            Button("Check for updates") { updater.check(userInitiated: true) }
+                .disabled(updater.isBusy)
+        }
+    }
+
+    @ViewBuilder private var updateStatusText: some View {
+        switch updater.status {
+        case .checking:
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.small)
+                Text("Checking…")
+            }
+            .font(.system(size: 11))
+            .foregroundColor(.secondary)
+        case .upToDate:
+            Text("You have the latest version.")
+                .font(.system(size: 11))
+                .foregroundColor(.secondary)
+        case .available(let version):
+            Text("Leeway \(version) is available.")
+                .font(.system(size: 11))
+                .foregroundColor(.accentColor)
+        case .downloading(let version), .installing(let version):
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.small)
+                Text("Installing \(version). Leeway will reopen by itself.")
+            }
+            .font(.system(size: 11))
+            .foregroundColor(.secondary)
+        case .failed(let message):
+            Text(message)
+                .font(.system(size: 11))
+                .foregroundColor(.orange)
+                .fixedSize(horizontal: false, vertical: true)
+        case .idle:
+            EmptyView()
         }
     }
 }

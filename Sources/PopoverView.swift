@@ -17,6 +17,7 @@ enum UsageColors {
 struct PopoverView: View {
     @ObservedObject var store: UsageStore
     @ObservedObject var settings: AppSettings
+    @ObservedObject var updater: Updater = Updater.shared
     let onRefresh: () -> Void
     let onOpenSettings: () -> Void
     let onQuit: () -> Void
@@ -32,6 +33,7 @@ struct PopoverView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             header
+            updateBanner
             if let message = store.errorMessage {
                 errorBanner(message)
             }
@@ -70,15 +72,65 @@ struct PopoverView: View {
             }
             Spacer()
             if store.isLoading {
-                ProgressView()
-                    .controlSize(.small)
+                HStack(spacing: 6) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Refreshing…")
+                }
+                .font(.system(size: 11))
+                .foregroundColor(.secondary)
             } else {
                 Button(action: onRefresh) {
-                    Image(systemName: "arrow.clockwise")
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.clockwise")
+                        Text("Refresh")
+                    }
                 }
                 .buttonStyle(BorderlessButtonStyle())
-                .help("Refresh now")
+                .font(.system(size: 11))
+                .help("Get the latest numbers from Claude now")
             }
+        }
+    }
+
+    /// Shown only while a new version is available or being installed.
+    @ViewBuilder private var updateBanner: some View {
+        switch updater.status {
+        case .available(let version):
+            HStack(spacing: 8) {
+                Image(systemName: "arrow.down.circle.fill")
+                    .foregroundColor(.accentColor)
+                Text("Leeway \(version) is available")
+                    .font(.system(size: 12))
+                Spacer()
+                Button("Update now") { updater.installUpdate() }
+                    .controlSize(.small)
+            }
+            .padding(10)
+            .background(RoundedRectangle(cornerRadius: 8).fill(Color.accentColor.opacity(0.12)))
+        case .downloading(let version), .installing(let version):
+            HStack(spacing: 8) {
+                ProgressView()
+                    .controlSize(.small)
+                Text("Installing Leeway \(version). It will reopen by itself.")
+                    .font(.system(size: 12))
+                Spacer()
+            }
+            .padding(10)
+            .background(RoundedRectangle(cornerRadius: 8).fill(Color.accentColor.opacity(0.12)))
+        case .failed(let message):
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundColor(.orange)
+                Text(message)
+                    .font(.system(size: 12))
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer()
+            }
+            .padding(10)
+            .background(RoundedRectangle(cornerRadius: 8).fill(Color.orange.opacity(0.12)))
+        default:
+            EmptyView()
         }
     }
 

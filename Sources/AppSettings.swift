@@ -70,6 +70,7 @@ final class AppSettings: ObservableObject {
     @Published var orgId: String { didSet { store(orgId, "orgId") } }
     @Published var orgName: String { didSet { store(orgName, "orgName") } }
     @Published var hasCompletedSetup: Bool { didSet { store(hasCompletedSetup, "hasCompletedSetup") } }
+    @Published var checkForUpdates: Bool { didSet { store(checkForUpdates, "checkForUpdates") } }
 
     private init() {
         let defaults = UserDefaults.standard
@@ -95,6 +96,7 @@ final class AppSettings: ObservableObject {
         orgId = text("orgId")
         orgName = text("orgName")
         hasCompletedSetup = bool("hasCompletedSetup", false)
+        checkForUpdates = bool("checkForUpdates", true)
     }
 
     private func store(_ value: Any, _ key: String) {

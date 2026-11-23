@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import UserNotifications
 
@@ -22,6 +23,37 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
                                 willPresent notification: UNNotification,
                                 withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
         completionHandler([.banner, .sound])
+    }
+
+    enum TestResult {
+        case sent, bannersOff, notAllowed
+    }
+
+    /// Sends the test alert and reports whether macOS will actually show it.
+    func sendTest(completion: @escaping (TestResult) -> Void) {
+        let center = UNUserNotificationCenter.current()
+        center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
+            center.getNotificationSettings { settings in
+                let result: TestResult
+                if !granted || settings.authorizationStatus == .denied {
+                    result = .notAllowed
+                } else if settings.alertStyle == .none {
+                    result = .bannersOff
+                } else {
+                    result = .sent
+                }
+                if result != .notAllowed {
+                    self.post(title: "Leeway alerts are on", body: "This is how a usage alert will look.")
+                }
+                DispatchQueue.main.async { completion(result) }
+            }
+        }
+    }
+
+    static func openNotificationSettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.notifications") {
+            NSWorkspace.shared.open(url)
+        }
     }
 
     func post(title: String, body: String) {

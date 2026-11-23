@@ -18,6 +18,7 @@ Runs on macOS 11 Big Sur and newer, on both Apple Silicon and Intel Macs (one un
 - **Alerts.** At 75%, at 90%, when you hit a limit, when you're on pace to run out, and when your session resets after you hit 90%. Each fires once per limit window.
 - **History chart.** Session and weekly usage over the last 24 hours, 7 days or 30 days.
 - **Open at login**, refresh every 1 to 30 minutes, plus an extra refresh when your Mac wakes up. Right-click the menu bar item for Refresh, Settings and Quit.
+- **Updates from inside the app.** Leeway checks GitHub once a day. When a new release is out, click Update now in the popover and it installs itself and reopens. You can also right-click the menu bar item and choose Check for Updates.
 - **Times match your Mac.** Reset times follow the 12-hour or 24-hour setting in System Settings > General > Date & Time.
 
 ## Screenshots
@@ -34,7 +35,7 @@ Runs on macOS 11 Big Sur and newer, on both Apple Silicon and Intel Macs (one un
 
 Get `Leeway-x.y.z.zip` from the [latest release](https://github.com/cutthroat361/Leeway/releases/latest), unzip it and move Leeway to Applications. It runs on Apple Silicon and Intel Macs.
 
-The download isn't signed with an Apple Developer ID yet, so macOS blocks it the first time. Open it once, then go to System Settings > Privacy & Security and click Open Anyway.
+The download isn't signed with an Apple Developer ID yet, so macOS blocks it the first time. Open it once, then go to System Settings > Privacy & Security and click Open Anyway. Later versions install from inside Leeway, without this step.
 
 ### Build it yourself
 
@@ -93,7 +94,8 @@ The zip in `build/` is then ready to put on a website or a GitHub release.
 ## Privacy
 
 - Your claude.ai session is stored in the macOS Keychain. The Claude Code login is read from where Claude Code keeps it and is never copied or changed.
-- Requests go only to `claude.ai` and `api.anthropic.com`.
+- Usage requests go only to `claude.ai` and `api.anthropic.com`.
+- Once a day Leeway asks GitHub (`api.github.com`) for the latest Leeway release. Nothing about you or your usage is sent. Turn it off in Settings > General.
 - History stays on your Mac in `~/Library/Application Support/Leeway/history.json`. Clear it in Settings > General.
 - No analytics and no tracking.
 
@@ -103,9 +105,9 @@ The zip in `build/` is then ready to put on a website or a GitHub release.
 
 **"Claude Code's login has expired."** Run `claude` in Terminal once, then click refresh in Leeway.
 
-**macOS asks Leeway for permission to use the Keychain.** Click Always Allow. When you build from source, this can come back after a rebuild because each build has a new signature.
+**macOS asks Leeway for permission to use the Keychain.** Click Always Allow. This can come back after an update or a rebuild, because each build has a new signature until Leeway is signed with a Developer ID.
 
-**No notifications.** Open Settings > Alerts and click Send a test notification. If nothing shows up, turn on notifications for Leeway in System Settings > Notifications.
+**No notifications.** Open Settings > Alerts and click Send a test notification. Leeway tells you if notifications are off or banners are hidden. If it says the test was sent but no banner appeared, a Focus such as Do Not Disturb or Sleep is probably on.
 
 **Launch at login doesn't stick.** Make sure Leeway is in `/Applications`, then turn the option off and on again.
 

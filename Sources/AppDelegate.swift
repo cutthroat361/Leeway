@@ -11,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var signInController: SignInWindowController?
     private var refreshTimer: Timer?
     private var clockTimer: Timer?
+    private var updateTimer: Timer?
     private var cancellables = Set<AnyCancellable>()
     private var activeAuth: AuthMethod = .browser
     private var activeInterval = 0
@@ -37,6 +38,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 DispatchQueue.main.async { self?.settingsDidChange() }
             }
             .store(in: &cancellables)
+        // The update banner changes the popover's height; macOS 11 and 12 need a nudge.
+        Updater.shared.objectWillChange
+            .sink { [weak self] _ in
+                DispatchQueue.main.async {
+                    guard let self = self, self.popover.isShown else { return }
+                    self.fitPopover(force: false)
+                }
+            }
+            .store(in: &cancellables)
 
         NSWorkspace.shared.notificationCenter.addObserver(self,
                                                           selector: #selector(systemDidWake),
@@ -59,6 +69,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         scheduleTimers()
         updateStatusItem()
         store.refresh()
+        scheduleUpdateChecks()
 
         if firstLaunch {
             settings.hasCompletedSetup = true
@@ -130,6 +141,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
         menu.addItem(withTitle: "Refresh now", action: #selector(refreshNow), keyEquivalent: "r").target = self
         menu.addItem(withTitle: "Settings…", action: #selector(openSettingsFromMenu), keyEquivalent: ",").target = self
+        if let version = Updater.shared.availableVersion {
+            menu.addItem(withTitle: "Update to Leeway \(version)", action: #selector(installUpdateFromMenu), keyEquivalent: "").target = self
+        } else {
+            menu.addItem(withTitle: "Check for Updates…", action: #selector(checkForUpdatesFromMenu), keyEquivalent: "").target = self
+        }
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit Leeway", action: #selector(quitApp), keyEquivalent: "q").target = self
         statusItem.menu = menu
@@ -140,6 +156,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func refreshNow() { store.refresh() }
     @objc private func openSettingsFromMenu() { openSettings() }
     @objc private func quitApp() { NSApp.terminate(nil) }
+    @objc private func installUpdateFromMenu() { Updater.shared.installUpdate() }
+
+    @objc private func checkForUpdatesFromMenu() {
+        Updater.shared.check(userInitiated: true) { [weak self] in
+            self?.showUpdateResult()
+        }
+    }
+
+    /// Answers a "Check for Updates…" from the menu, since no window is open to show it.
+    private func showUpdateResult() {
+        let updater = Updater.shared
+        let alert = NSAlert()
+        switch updater.status {
+        case .available(let version):
+            alert.messageText = "Leeway \(version) is available"
+            alert.informativeText = "You have \(AppInfo.version). Leeway will download the update, install it and reopen by itself. macOS may ask to use the Keychain again afterwards; click Always Allow."
+            alert.addButton(withTitle: "Update now")
+            alert.addButton(withTitle: "Later")
+        case .failed(let message):
+            alert.messageText = "Couldn't check for updates"
+            alert.informativeText = message
+            alert.addButton(withTitle: "OK")
+        default:
+            alert.messageText = "You have the latest version"
+            alert.informativeText = "Leeway \(AppInfo.version) is the newest release."
+            alert.addButton(withTitle: "OK")
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        if alert.runModal() == .alertFirstButtonReturn, updater.availableVersion != nil {
+            updater.installUpdate()
+        }
+    }
 
     private func updateStatusItem() {
         guard let button = statusItem?.button else { return }
@@ -191,6 +239,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             RunLoop.main.add(clock, forMode: .common)
             clockTimer = clock
         }
+    }
+
+    /// Checks GitHub shortly after launch, then once a day, while the setting is on.
+    private func scheduleUpdateChecks() {
+        let checkIfEnabled = { [weak self] in
+            guard let self = self, self.settings.checkForUpdates else { return }
+            Updater.shared.check(userInitiated: false)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 15, execute: checkIfEnabled)
+        let timer = Timer(timeInterval: 24 * 60 * 60, repeats: true) { _ in checkIfEnabled() }
+        timer.tolerance = 60 * 60
+        RunLoop.main.add(timer, forMode: .common)
+        updateTimer = timer
     }
 
     @objc private func clockFormatDidChange() {
