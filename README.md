@@ -119,4 +119,4 @@ Ideas borrowed from two open-source projects: [Claude Usage Tracker](https://git
 
 Leeway isn't made by, affiliated with, or endorsed by Anthropic. Claude is a trademark of Anthropic PBC.
 
-MIT License.
+MIT License, copyright (c) 2026 EKorol. See [LICENSE](LICENSE).
