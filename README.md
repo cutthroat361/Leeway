@@ -30,6 +30,13 @@ Runs on macOS 11 Big Sur and newer, on both Apple Silicon and Intel Macs (one un
 | **Alerts** | **General** |
 | <img src="docs/screenshots/alerts.png" width="400" alt="Settings, Alerts tab: notifications at 75%, 90%, at the limit, on pace and on session reset"> | <img src="docs/screenshots/general.png" width="400" alt="Settings, General tab: refresh interval, open at login and clear history"> |
 
+**Widget** (small and medium)
+
+<p align="center">
+  <img src="docs/screenshots/widget-small.png" width="220" alt="Small Leeway widget: session 0% and weekly 4% used, with pace ticks and reset times">
+  <img src="docs/screenshots/widget-medium.png" width="415" alt="Medium Leeway widget: session and weekly bars with reset times and pace, such as Plenty left">
+</p>
+
 ## Install
 
 ### Download
