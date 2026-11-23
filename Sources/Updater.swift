@@ -1,11 +1,13 @@
 import AppKit
 import Foundation
+import Security
 
 /// Checks GitHub for a newer Leeway release and, when asked, installs it and restarts.
 ///
 /// Only the zip attached to the latest release of the Leeway repository is used. Before
 /// anything is replaced, the download must be Leeway (same bundle ID), newer than this
-/// copy, and pass `codesign --verify`, which catches a damaged or altered bundle.
+/// copy, and pass `codesign --verify`, which catches a damaged or altered bundle. Once this
+/// copy is signed with a Developer ID, the update must be signed by the same team.
 final class Updater: ObservableObject {
     static let shared = Updater()
 
@@ -206,7 +208,23 @@ final class Updater: ObservableObject {
         guard run("/usr/bin/codesign", ["--verify", "--deep", "--strict", newApp.path]) else {
             throw UpdateError(message: "The download looks damaged, so nothing was changed. Try again.")
         }
+        if let currentTeam = teamID(ofAppAt: Bundle.main.bundleURL),
+           teamID(ofAppAt: newApp) != currentTeam {
+            throw UpdateError(message: "The update isn't signed by Leeway's developer, so nothing was changed.")
+        }
         return newApp
+    }
+
+    /// The Developer ID team that signed an app, or nil for an unsigned or ad-hoc signed one.
+    private static func teamID(ofAppAt url: URL) -> String? {
+        var staticCode: SecStaticCode?
+        guard SecStaticCodeCreateWithPath(url as CFURL, [], &staticCode) == errSecSuccess,
+              let code = staticCode else { return nil }
+        var information: CFDictionary?
+        let flags = SecCSFlags(rawValue: kSecCSSigningInformation)
+        guard SecCodeCopySigningInformation(code, flags, &information) == errSecSuccess,
+              let info = information as NSDictionary? else { return nil }
+        return info[kSecCodeInfoTeamIdentifier as String] as? String
     }
 
     /// Hands over to a small script that waits for Leeway to quit, swaps in the new copy

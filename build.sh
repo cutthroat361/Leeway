@@ -8,12 +8,13 @@
 # Optional settings, for sharing the app with other people:
 #   VERSION=1.2.0                                                   version shown in the app
 #   SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)"    sign with your Apple Developer ID
-#   NOTARY_PROFILE=leeway                                           notarize (see README)
+#   NOTARY_PROFILE=leeway                                           notarize with a saved login (see README)
+#   NOTARY_APPLE_ID, NOTARY_TEAM_ID, NOTARY_PASSWORD                 or notarize with these (used by GitHub releases)
 set -euo pipefail
 
 APP_NAME="Leeway"
 BUNDLE_ID="${BUNDLE_ID:-io.github.cutthroat361.leeway}"
-VERSION="${VERSION:-1.2.0}"
+VERSION="${VERSION:-1.2.1}"
 BUILD_NUMBER="${BUILD_NUMBER:-$(date +%Y%m%d%H%M)}"
 MIN_MACOS="11.0"
 
@@ -101,12 +102,23 @@ fi
 ZIP="$BUILD/$APP_NAME-$VERSION.zip"
 ditto -c -k --keepParent "$APP" "$ZIP"
 
-if [[ -n "${NOTARY_PROFILE:-}" ]]; then
+# (A yes/no flag instead of checking the array's size: macOS ships bash 3.2,
+# which treats an empty array as unset under "set -u".)
+NOTARIZE=0
+if [[ -n "${NOTARY_APPLE_ID:-}" && -n "${NOTARY_TEAM_ID:-}" && -n "${NOTARY_PASSWORD:-}" ]]; then
+  NOTARIZE=1
+  NOTARY_ARGS=(--apple-id "$NOTARY_APPLE_ID" --team-id "$NOTARY_TEAM_ID" --password "$NOTARY_PASSWORD")
+elif [[ -n "${NOTARY_PROFILE:-}" ]]; then
+  NOTARIZE=1
+  NOTARY_ARGS=(--keychain-profile "$NOTARY_PROFILE")
+fi
+
+if [[ "$NOTARIZE" == "1" ]]; then
   if [[ -z "${SIGN_IDENTITY:-}" ]]; then
-    echo "NOTARY_PROFILE needs SIGN_IDENTITY too. Skipping notarization."
+    echo "Notarization needs SIGN_IDENTITY too. Skipping notarization."
   else
     echo "Sending to Apple for notarization (a few minutes)..."
-    xcrun notarytool submit "$ZIP" --keychain-profile "$NOTARY_PROFILE" --wait
+    xcrun notarytool submit "$ZIP" "${NOTARY_ARGS[@]}" --wait
     xcrun stapler staple "$APP"
     rm -f "$ZIP"
     ditto -c -k --keepParent "$APP" "$ZIP"

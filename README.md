@@ -89,7 +89,19 @@ The zip in `build/` is then ready to put on a website or a GitHub release.
 
 ### GitHub releases
 
-`.github/workflows/release.yml` builds the universal app on GitHub's Macs. Push a tag such as `v1.0.0` and the zip is attached to a new release. Those builds are unsigned until you add your Developer ID to the workflow.
+`.github/workflows/release.yml` builds the universal app on GitHub's Macs. Publish a release with a new tag such as `v1.3.0` and the zip is attached to it.
+
+Releases are signed and notarized automatically once these five secrets are saved under the repository's Settings > Secrets and variables > Actions. Without them, releases are unsigned.
+
+| Secret | What it is |
+| --- | --- |
+| `MACOS_CERTIFICATE` | Your Developer ID Application certificate, exported from Keychain Access as a `.p12` file and base64-encoded: `base64 -i Leeway.p12 \| pbcopy` |
+| `MACOS_CERTIFICATE_PASSWORD` | The password you chose when exporting the `.p12` |
+| `APPLE_ID` | The email of your Apple developer account |
+| `APPLE_TEAM_ID` | Your 10-character Team ID, shown under Membership at developer.apple.com/account |
+| `APPLE_APP_PASSWORD` | An app-specific password made at account.apple.com > Sign-In and Security |
+
+The certificate only lives in a temporary keychain during the build and is deleted afterwards. Once people have a signed copy, Leeway only installs updates signed by the same developer team.
 
 ## Privacy
 
