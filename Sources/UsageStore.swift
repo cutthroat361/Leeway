@@ -74,8 +74,18 @@ final class UsageStore: ObservableObject {
                 self.needsSignIn = error.needsSignIn
             }
             self.now = Date()
+            self.publishToWidget()
             self.onChange?()
         }
+    }
+
+    /// Keeps the widget in step with what the menu bar shows.
+    private func publishToWidget() {
+        WidgetBridge.publish(session: session,
+                             weekly: weekly,
+                             updated: lastUpdated,
+                             subtitle: sourceLabel,
+                             message: errorMessage)
     }
 
     /// Forget what's on screen, for example after switching accounts.
@@ -88,6 +98,7 @@ final class UsageStore: ObservableObject {
         needsSignIn = false
         sourceLabel = ""
         organizations = []
+        publishToWidget()
         onChange?()
     }
 

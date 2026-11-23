@@ -28,6 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         installStatusItem()
+        statusItem.isVisible = settings.showInMenuBar
         installPopover()
 
         activeAuth = settings.authMethod
@@ -214,7 +215,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             activeInterval = settings.refreshMinutes
             scheduleTimers()
         }
+        if statusItem.isVisible != settings.showInMenuBar {
+            if !settings.showInMenuBar { popover.performClose(nil) }
+            statusItem.isVisible = settings.showInMenuBar
+        }
         updateStatusItem()
+    }
+
+    // MARK: Opening Leeway from the widget or from Applications
+
+    /// The widget opens leeway://open when clicked.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        guard urls.contains(where: { $0.scheme == "leeway" }) else { return }
+        DispatchQueue.main.async { [weak self] in self?.showMainUI() }
+    }
+
+    /// Opening Leeway again from Applications or Spotlight while it's running.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        openSettings()
+        return true
+    }
+
+    /// The popover when Leeway is in the menu bar, Settings when it isn't.
+    private func showMainUI() {
+        if settings.showInMenuBar && statusItem.isVisible {
+            if !popover.isShown { togglePopover() }
+        } else {
+            openSettings()
+        }
     }
 
     // MARK: Timers

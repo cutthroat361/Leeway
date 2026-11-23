@@ -18,6 +18,7 @@ Runs on macOS 11 Big Sur and newer, on both Apple Silicon and Intel Macs (one un
 - **Alerts.** At 75%, at 90%, when you hit a limit, when you're on pace to run out, and when your session resets after you hit 90%. Each fires once per limit window.
 - **History chart.** Session and weekly usage over the last 24 hours, 7 days or 30 days.
 - **Open at login**, refresh every 1 to 30 minutes, plus an extra refresh when your Mac wakes up. Right-click the menu bar item for Refresh, Settings and Quit.
+- **Widget.** A small or medium widget for the desktop (macOS 14 and later) or Notification Center, with both bars, pace ticks and reset times. Right-click the desktop, choose Edit Widgets and search for Leeway. You can hide the menu bar item and use only the widget.
 - **Updates from inside the app.** Leeway checks GitHub once a day. When a new release is out, click Update now in the popover and it installs itself and reopens. You can also right-click the menu bar item and choose Check for Updates.
 - **Times match your Mac.** Reset times follow the 12-hour or 24-hour setting in System Settings > General > Date & Time.
 
@@ -109,6 +110,7 @@ The certificate only lives in a temporary keychain during the build and is delet
 - Usage requests go only to `claude.ai` and `api.anthropic.com`.
 - Once a day Leeway asks GitHub (`api.github.com`) for the latest Leeway release. Nothing about you or your usage is sent. Turn it off in Settings > General.
 - History stays on your Mac in `~/Library/Application Support/Leeway/history.json`. Clear it in Settings > General.
+- The widget reads a summary Leeway saves next to it (`widget.json`). The widget runs in a sandbox that can read only that folder.
 - No analytics and no tracking.
 
 ## Troubleshooting

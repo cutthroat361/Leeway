@@ -271,20 +271,49 @@ struct MenuBarTab: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("What should the menu bar show?")
-                .font(.system(size: 13, weight: .semibold))
-            Picker("Menu bar style", selection: $settings.barStyle) {
-                ForEach(BarStyle.allCases) { style in
-                    Text("\(style.title)   \(style.example)").tag(style)
-                }
+            Toggle("Show Leeway in the menu bar", isOn: $settings.showInMenuBar)
+            if !settings.showInMenuBar {
+                Text("Leeway keeps running and updating its widget. To get back to Settings, click the widget or open Leeway from Applications.")
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .pickerStyle(RadioGroupPickerStyle())
-            .labelsHidden()
 
-            Toggle("Show the gauge icon next to the numbers", isOn: $settings.showIcon)
-                .disabled(settings.barStyle == .miniBars)
-            Toggle("Turn numbers orange at 75% and red at 90%", isOn: $settings.colorWhenHigh)
+            VStack(alignment: .leading, spacing: 14) {
+                Text("What should the menu bar show?")
+                    .font(.system(size: 13, weight: .semibold))
+                Picker("Menu bar style", selection: $settings.barStyle) {
+                    ForEach(BarStyle.allCases) { style in
+                        Text("\(style.title)   \(style.example)").tag(style)
+                    }
+                }
+                .pickerStyle(RadioGroupPickerStyle())
+                .labelsHidden()
+
+                Toggle("Show the gauge icon next to the numbers", isOn: $settings.showIcon)
+                    .disabled(settings.barStyle == .miniBars)
+                Toggle("Turn numbers orange at 75% and red at 90%", isOn: $settings.colorWhenHigh)
+            }
+            .disabled(!settings.showInMenuBar)
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Widget")
+                    .font(.system(size: 13, weight: .semibold))
+                Text(MenuBarTab.widgetHelp)
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
+    }
+
+    static var widgetHelp: String {
+        if #available(macOS 14.0, *) {
+            return "Leeway also has a widget for your desktop and Notification Center. Right-click the desktop, choose Edit Widgets, then search for Leeway."
+        }
+        return "Leeway also has a widget for Notification Center. Click the date and time in the menu bar, choose Edit Widgets, then search for Leeway."
     }
 }
 
