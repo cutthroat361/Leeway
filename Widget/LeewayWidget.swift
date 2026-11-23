@@ -106,7 +106,7 @@ struct UsageWidgetView: View {
                 .foregroundColor(.orange)
                 .lineLimit(2)
         } else if let updated = snapshot.updated {
-            (Text("Updated ") + Text(updated, style: .relative) + Text(" ago"))
+            Text("Updated " + WidgetTime.when(updated, now: entry.date))
                 .font(.system(size: 9))
                 .foregroundColor(.secondary)
                 .lineLimit(1)

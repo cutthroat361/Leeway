@@ -17,8 +17,7 @@ BUNDLE_ID="${BUNDLE_ID:-io.github.cutthroat361.leeway}"
 VERSION="${VERSION:-1.3.0}"
 BUILD_NUMBER="${BUILD_NUMBER:-$(date +%Y%m%d%H%M)}"
 MIN_MACOS="11.0"
-# The widget needs macOS 14 Sonoma (desktop widgets). Built for an older macOS, it crashes on
-# start in newer versions, inside Apple's extension startup code.
+# The widget needs macOS 14 Sonoma (desktop widgets).
 WIDGET_MIN_MACOS="14.0"
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
@@ -40,6 +39,8 @@ rm -rf "$BUILD"
 mkdir -p "$BUILD/obj" "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APPEX/Contents/MacOS"
 
 # The app, then its widget: a small separate program that macOS runs in a sandbox.
+# Like Xcode, the widget starts at Apple's _NSExtensionMain. Starting at its own main(),
+# macOS 27 crashes it in ExtensionFoundation before any widget code runs.
 compile() {
   xcrun swiftc \
     -O \
@@ -57,6 +58,7 @@ compile() {
     -module-name "$WIDGET_NAME" \
     -parse-as-library \
     -application-extension \
+    -Xlinker -e -Xlinker _NSExtensionMain \
     "$ROOT"/Widget/*.swift "$ROOT"/Shared/*.swift \
     -o "$BUILD/obj/$WIDGET_NAME-$1"
 }
