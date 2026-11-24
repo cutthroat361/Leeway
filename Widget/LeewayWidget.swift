@@ -149,7 +149,7 @@ struct LimitView: View {
 
     private var resetText: String {
         guard let reset = limit.resetsAt, reset > date else {
-            return "Starts when you next use Claude"
+            return compact ? "Starts on next use" : "Starts when you next use Claude"
         }
         return "Resets " + WidgetTime.when(reset, now: date)
     }
