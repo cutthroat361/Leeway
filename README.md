@@ -97,7 +97,7 @@ The zip in `build/` is then ready to put on a website or a GitHub release.
 
 ### GitHub releases
 
-`.github/workflows/release.yml` builds the universal app on GitHub's Macs. Publish a release with a new tag such as `v1.3.0` and the zip is attached to it.
+`.github/workflows/release.yml` builds the universal app on GitHub's Macs. Publish a release with a new tag such as `v1.3.1` and the zip is attached to it.
 
 Releases are signed and notarized automatically once these five secrets are saved under the repository's Settings > Secrets and variables > Actions. Without them, releases are unsigned.
 

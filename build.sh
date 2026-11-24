@@ -14,7 +14,7 @@ set -euo pipefail
 
 APP_NAME="Leeway"
 BUNDLE_ID="${BUNDLE_ID:-io.github.cutthroat361.leeway}"
-VERSION="${VERSION:-1.3.0}"
+VERSION="${VERSION:-1.3.1}"
 BUILD_NUMBER="${BUILD_NUMBER:-$(date +%Y%m%d%H%M)}"
 MIN_MACOS="11.0"
 # The widget needs macOS 14 Sonoma (desktop widgets).
