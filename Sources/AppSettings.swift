@@ -159,10 +159,14 @@ final class AppSettings: ObservableObject {
            let saved = try? JSONDecoder().decode([Account].self, from: data), !saved.isEmpty {
             return saved
         }
-        var first = Account(id: Account.primaryId, name: "Personal",
+        let orgName = defaults.string(forKey: "orgName") ?? ""
+        // claude.ai names a personal plan's organization "<email>'s Organization";
+        // any other organization name is most likely a team at work.
+        let isTeam = !orgName.isEmpty && !orgName.hasSuffix("'s Organization")
+        var first = Account(id: Account.primaryId, name: isTeam ? "Work" : "Personal",
                             authMethod: AuthMethod(rawValue: defaults.string(forKey: "authMethod") ?? "") ?? .browser)
         first.orgId = defaults.string(forKey: "orgId") ?? ""
-        first.orgName = defaults.string(forKey: "orgName") ?? ""
+        first.orgName = orgName
         return [first]
     }
 }

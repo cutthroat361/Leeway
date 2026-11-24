@@ -14,6 +14,7 @@ Runs on macOS 11 Big Sur and newer, on both Apple Silicon and Intel Macs (one un
 
 - **Five menu bar styles.** `12% | 48%` used, `88% | 52% left`, two mini bars, `12% ↻ 3h 49m` (session plus time until it resets), or the session alone. Optional gauge icon. Numbers turn orange at 75% and red at 90%.
 - **Three ways to connect.** Reuse the Claude Code login already on your Mac, sign in to claude.ai in a small built-in window, or paste a `sessionKey` cookie.
+- **Two accounts.** Watch a personal and a work account side by side (`P 12% | 48%   W 30% | 61%`), or switch between them in the popover. Each account has its own sign-in, history and alerts, and the widget can show both or either one.
 - **Pace tick.** Each bar has a thin tick showing how much of the window has passed. Fill to the left of the tick means you're under pace. If you're on track to run out early, the popover says when, for example "Runs out around Thu 3:10 PM".
 - **Alerts.** At 75%, at 90%, when you hit a limit, when you're on pace to run out, and when your session resets after you hit 90%. Each fires once per limit window.
 - **History chart.** Session and weekly usage over the last 24 hours, 7 days or 30 days.
@@ -67,6 +68,8 @@ The first time it opens, Leeway picks a method for you: your Claude Code login i
 
 **Sign in with a claude.ai window.** Click Sign in to Claude and sign in the way you normally do. The window closes by itself once you're in. If Google sign-in is blocked inside the window, choose Continue with email and type the code from the email.
 
+**A second account.** In Settings > Account, click Add a second account, give it a name such as Work, and pick how it signs in. Each account can use a different method, so one can use your Claude Code login and the other a claude.ai sign-in. Signing in to the second account doesn't sign you out of the first. If one login belongs to several organizations, pick the organization for each account. Choose what the menu bar and the widget show in Settings > Menu bar, or switch in the popover.
+
 **Paste a session key.** For people who prefer to copy it themselves:
 
 1. Open claude.ai in your browser and sign in.
@@ -116,7 +119,7 @@ The certificate only lives in a temporary keychain during the build and is delet
 - Your claude.ai session is stored in the macOS Keychain. The Claude Code login is read from where Claude Code keeps it and is never copied or changed.
 - Usage requests go only to `claude.ai` and `api.anthropic.com`.
 - Once a day Leeway asks GitHub (`api.github.com`) for the latest Leeway release. Nothing about you or your usage is sent. Turn it off in Settings > General.
-- History stays on your Mac in `~/Library/Application Support/Leeway/history.json`. Clear it in Settings > General.
+- History stays on your Mac in `~/Library/Application Support/Leeway/` (`history.json`, plus one file for a second account). Clear it in Settings > General.
 - The widget reads a summary Leeway saves next to it (`widget.json`). The widget runs in a sandbox that can read only that folder.
 - No analytics and no tracking.
 
