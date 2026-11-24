@@ -32,17 +32,17 @@ enum HistoryRange: String, CaseIterable, Identifiable {
     }
 }
 
-/// Keeps 31 days of readings in ~/Library/Application Support/Leeway/history.json.
+/// Keeps 31 days of readings for one account in ~/Library/Application Support/Leeway/.
 final class HistoryStore {
     private(set) var points: [HistoryPoint] = []
     private let fileURL: URL
 
-    init() {
+    init(fileName: String = "history.json") {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSHomeDirectory())
         let folder = base.appendingPathComponent("Leeway", isDirectory: true)
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        fileURL = folder.appendingPathComponent("history.json")
+        fileURL = folder.appendingPathComponent(fileName)
         load()
     }
 
@@ -66,6 +66,12 @@ final class HistoryStore {
     func clear() {
         points = []
         save()
+    }
+
+    /// Removes the file, for an account that has been removed.
+    func deleteFile() {
+        points = []
+        try? FileManager.default.removeItem(at: fileURL)
     }
 
     private func load() {

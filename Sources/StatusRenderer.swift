@@ -3,13 +3,22 @@ import AppKit
 enum StatusRenderer {
     private static var cachedIcon: NSImage?
 
-    static func render(button: NSStatusBarButton, session: UsageWindow?, weekly: UsageWindow?,
-                       settings: AppSettings, hasError: Bool, now: Date) {
-        button.toolTip = tooltip(session: session, weekly: weekly, hasError: hasError, now: now)
+    /// What the menu bar shows for one account. `label` is the account's initial,
+    /// set when more than one account is shown.
+    struct Item {
+        let label: String?
+        let name: String?
+        let session: UsageWindow?
+        let weekly: UsageWindow?
+        let hasError: Bool
+    }
+
+    static func render(button: NSStatusBarButton, items: [Item], settings: AppSettings, now: Date) {
+        button.toolTip = tooltip(items: items, now: now)
 
         if settings.barStyle == .miniBars {
             button.attributedTitle = NSAttributedString(string: "")
-            button.image = miniBarsImage(session: session?.used, weekly: weekly?.used, colored: settings.colorWhenHigh)
+            button.image = miniBarsImage(items: items, colored: settings.colorWhenHigh)
             button.imagePosition = .imageOnly
             return
         }
@@ -17,8 +26,15 @@ enum StatusRenderer {
         let icon = settings.showIcon ? gaugeIcon() : nil
         button.image = icon
         button.imagePosition = icon == nil ? .noImage : .imageLeading
-        button.attributedTitle = title(style: settings.barStyle, session: session, weekly: weekly,
-                                       colored: settings.colorWhenHigh, leadingSpace: icon != nil, now: now)
+        let output = NSMutableAttributedString()
+        for (index, item) in items.enumerated() {
+            if index > 0 {
+                output.append(NSAttributedString(string: "   ", attributes: [.font: NSFont.systemFont(ofSize: 12)]))
+            }
+            output.append(title(style: settings.barStyle, item: item,
+                                colored: settings.colorWhenHigh, leadingSpace: index == 0 && icon != nil, now: now))
+        }
+        button.attributedTitle = output
     }
 
     static func alertColor(_ used: Double) -> NSColor? {
@@ -27,13 +43,15 @@ enum StatusRenderer {
         return nil
     }
 
-    private static func title(style: BarStyle, session: UsageWindow?, weekly: UsageWindow?,
+    private static func title(style: BarStyle, item: Item,
                               colored: Bool, leadingSpace: Bool, now: Date) -> NSAttributedString {
         let font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .medium)
         let output = NSMutableAttributedString()
+        let session = item.session
+        let weekly = item.weekly
 
-        func add(_ text: String, used: Double? = nil, quiet: Bool = false) {
-            var attributes: [NSAttributedString.Key: Any] = [.font: font]
+        func add(_ text: String, used: Double? = nil, quiet: Bool = false, bold: Bool = false) {
+            var attributes: [NSAttributedString.Key: Any] = [.font: bold ? NSFont.systemFont(ofSize: 11, weight: .bold) : font]
             if quiet {
                 attributes[.foregroundColor] = NSColor.secondaryLabelColor
             } else if colored, let used = used, let color = alertColor(used) {
@@ -48,6 +66,7 @@ enum StatusRenderer {
         }
 
         if leadingSpace { add(" ") }
+        if let label = item.label { add(label + " ", quiet: true, bold: true) }
 
         switch style {
         case .bothUsed, .bothLeft:
@@ -87,18 +106,39 @@ enum StatusRenderer {
         return nil
     }
 
-    private static func miniBarsImage(session: Double?, weekly: Double?, colored: Bool) -> NSImage {
-        let sessionValue = session ?? 0
-        let weeklyValue = weekly ?? 0
-        let useColor = colored && (alertColor(sessionValue) != nil || alertColor(weeklyValue) != nil)
-        let image = NSImage(size: NSSize(width: 28, height: 16), flipped: false) { rect in
-            drawBar(in: NSRect(x: 1, y: 9, width: rect.width - 2, height: 5), value: sessionValue, colored: useColor)
-            drawBar(in: NSRect(x: 1, y: 2, width: rect.width - 2, height: 5), value: weeklyValue, colored: useColor)
+    /// Two bars per account (session on top, week below), with the account's initial
+    /// in front when more than one account is shown.
+    private static func miniBarsImage(items: [Item], colored: Bool) -> NSImage {
+        let values = items.map { (label: $0.label, session: $0.session?.used ?? 0, weekly: $0.weekly?.used ?? 0) }
+        let useColor = colored && values.contains { alertColor($0.session) != nil || alertColor($0.weekly) != nil }
+        let barWidth: CGFloat = 26
+        let labelWidth: CGFloat = 9
+        let gap: CGFloat = 6
+        let blockWidths = values.map { ($0.label == nil ? 0 : labelWidth) + barWidth }
+        let width = blockWidths.reduce(0, +) + gap * CGFloat(max(values.count - 1, 0)) + 2
+        let font = NSFont.systemFont(ofSize: 9, weight: .bold)
+        let image = NSImage(size: NSSize(width: max(width, 28), height: 16), flipped: false) { _ in
+            var x: CGFloat = 1
+            for value in values {
+                if let label = value.label {
+                    let ink: NSColor = useColor ? .labelColor : .black
+                    let text = NSAttributedString(string: label, attributes: [.font: font, .foregroundColor: ink])
+                    let size = text.size()
+                    text.draw(at: NSPoint(x: x + (labelWidth - 2 - size.width) / 2, y: (16 - size.height) / 2))
+                    x += labelWidth
+                }
+                drawBar(in: NSRect(x: x, y: 9, width: barWidth, height: 5), value: value.session, colored: useColor)
+                drawBar(in: NSRect(x: x, y: 2, width: barWidth, height: 5), value: value.weekly, colored: useColor)
+                x += barWidth + gap
+            }
             return true
         }
         // Template images follow the menu bar's light or dark look automatically.
         image.isTemplate = !useColor
-        image.accessibilityDescription = "Session \(TextFormat.percent(sessionValue)), weekly \(TextFormat.percent(weeklyValue))"
+        image.accessibilityDescription = items.map { item in
+            let prefix = item.name.map { "\($0): " } ?? ""
+            return prefix + "session \(TextFormat.percent(item.session?.used ?? 0)), weekly \(TextFormat.percent(item.weekly?.used ?? 0))"
+        }.joined(separator: "; ")
         return image
     }
 
@@ -117,16 +157,23 @@ enum StatusRenderer {
         NSBezierPath(roundedRect: filled, xRadius: radius, yRadius: radius).fill()
     }
 
-    private static func tooltip(session: UsageWindow?, weekly: UsageWindow?, hasError: Bool, now: Date) -> String {
+    private static func tooltip(items: [Item], now: Date) -> String {
         var lines: [String] = []
-        if let session = session {
-            lines.append("Session \(TextFormat.percent(session.used)) used. \(TextFormat.resetSentence(session.resetsAt, now: now))")
-        }
-        if let weekly = weekly {
-            lines.append("Weekly \(TextFormat.percent(weekly.used)) used. \(TextFormat.resetSentence(weekly.resetsAt, now: now))")
+        for item in items {
+            let prefix = item.name.map { "\($0) - " } ?? ""
+            var added = false
+            if let session = item.session {
+                lines.append("\(prefix)Session \(TextFormat.percent(session.used)) used. \(TextFormat.resetSentence(session.resetsAt, now: now))")
+                added = true
+            }
+            if let weekly = item.weekly {
+                lines.append("\(prefix)Weekly \(TextFormat.percent(weekly.used)) used. \(TextFormat.resetSentence(weekly.resetsAt, now: now))")
+                added = true
+            }
+            if !added { lines.append("\(prefix)Not connected yet") }
+            if item.hasError { lines.append("\(prefix)The last refresh failed. Click for details.") }
         }
         if lines.isEmpty { lines.append("Leeway: not connected yet") }
-        if hasError { lines.append("The last refresh failed. Click for details.") }
         return lines.joined(separator: "\n")
     }
 }

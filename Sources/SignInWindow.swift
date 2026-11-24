@@ -2,21 +2,24 @@ import AppKit
 import WebKit
 
 /// Shows claude.ai's own sign-in page. As soon as claude.ai sets its session
-/// cookie, Leeway saves it to the Keychain and closes the window.
+/// cookie, Leeway saves it to the Keychain and closes the window. The window starts
+/// with no cookies and keeps them in memory only, so you can sign in to a second
+/// account without signing out of the first.
 final class SignInWindowController: NSWindowController, NSWindowDelegate, WKNavigationDelegate, WKUIDelegate, WKHTTPCookieStoreObserver {
     private let onSessionKey: (String) -> Void
     private var webView: WKWebView?
     private var popups: [NSWindow] = []
     private var finished = false
     private var observing = false
+    private let dataStore = WKWebsiteDataStore.nonPersistent()
 
-    init(onSessionKey: @escaping (String) -> Void) {
+    init(title: String = "Sign in to Claude", onSessionKey: @escaping (String) -> Void) {
         self.onSessionKey = onSessionKey
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 520, height: 760),
                               styleMask: [.titled, .closable, .miniaturizable, .resizable],
                               backing: .buffered,
                               defer: false)
-        window.title = "Sign in to Claude"
+        window.title = title
         window.isReleasedWhenClosed = false
         window.minSize = NSSize(width: 420, height: 520)
         super.init(window: window)
@@ -40,7 +43,7 @@ final class SignInWindowController: NSWindowController, NSWindowDelegate, WKNavi
         tip.translatesAutoresizingMaskIntoConstraints = false
 
         let config = WKWebViewConfiguration()
-        config.websiteDataStore = WKWebsiteDataStore.default()
+        config.websiteDataStore = dataStore
         let web = WKWebView(frame: .zero, configuration: config)
         web.customUserAgent = UsageClient.browserUserAgent
         web.navigationDelegate = self
@@ -67,14 +70,11 @@ final class SignInWindowController: NSWindowController, NSWindowDelegate, WKNavi
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
 
-        // Start clean so Leeway captures the account you sign in with now.
-        WebData.clearClaudeData { [weak self] in
-            guard let self = self else { return }
-            WKWebsiteDataStore.default().httpCookieStore.add(self)
-            self.observing = true
-            if let url = URL(string: "https://claude.ai/login") {
-                self.webView?.load(URLRequest(url: url))
-            }
+        // The window's cookie store starts empty, so Leeway captures the account you sign in with now.
+        dataStore.httpCookieStore.add(self)
+        observing = true
+        if let url = URL(string: "https://claude.ai/login") {
+            webView?.load(URLRequest(url: url))
         }
     }
 
@@ -88,7 +88,7 @@ final class SignInWindowController: NSWindowController, NSWindowDelegate, WKNavi
     /// reliably: look for the session cookie after every page load too.
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         guard observing, !finished else { return }
-        checkForSession(in: WKWebsiteDataStore.default().httpCookieStore)
+        checkForSession(in: dataStore.httpCookieStore)
     }
 
     private func checkForSession(in cookieStore: WKHTTPCookieStore) {
@@ -112,7 +112,7 @@ final class SignInWindowController: NSWindowController, NSWindowDelegate, WKNavi
 
     private func stopObserving() {
         if observing {
-            WKWebsiteDataStore.default().httpCookieStore.remove(self)
+            dataStore.httpCookieStore.remove(self)
             observing = false
         }
     }

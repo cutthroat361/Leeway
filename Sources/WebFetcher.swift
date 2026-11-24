@@ -14,9 +14,11 @@ enum WebData {
 }
 
 /// Runs requests inside an off-screen WebKit view. A real browser engine passes
-/// Cloudflare's checks that plain URLSession requests sometimes fail.
+/// Cloudflare's checks that plain URLSession requests sometimes fail. Each fetcher
+/// keeps its cookies in memory only, so two accounts never see each other's session.
 final class WebFetcher: NSObject, WKNavigationDelegate {
     private var webView: WKWebView?
+    private var dataStore = WKWebsiteDataStore.nonPersistent()
     private var loadedKey: String?
     private var isReady = false
     private var waiting: [(Bool) -> Void] = []
@@ -48,9 +50,10 @@ final class WebFetcher: NSObject, WKNavigationDelegate {
         reset()
         waiting.append(then)
         loadedKey = sessionKey
+        dataStore = WKWebsiteDataStore.nonPersistent()
 
         let config = WKWebViewConfiguration()
-        config.websiteDataStore = WKWebsiteDataStore.default()
+        config.websiteDataStore = dataStore
         let view = WKWebView(frame: NSRect(x: 0, y: 0, width: 800, height: 600), configuration: config)
         view.customUserAgent = UsageClient.browserUserAgent
         view.navigationDelegate = self

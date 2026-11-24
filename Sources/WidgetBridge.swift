@@ -3,8 +3,16 @@ import WidgetKit
 
 /// Saves the latest numbers for the widget and asks macOS to redraw it.
 enum WidgetBridge {
-    static func publish(session: UsageWindow?, weekly: UsageWindow?, updated: Date?,
-                        subtitle: String, message: String?) {
+    struct Entry {
+        let name: String
+        let session: UsageWindow?
+        let weekly: UsageWindow?
+        let updated: Date?
+        let subtitle: String
+        let message: String?
+    }
+
+    static func publish(_ entries: [Entry]) {
         let now = Date()
         func limit(_ window: UsageWindow?) -> WidgetSnapshot.Limit? {
             guard let window = window else { return nil }
@@ -15,11 +23,14 @@ enum WidgetBridge {
                                         paceText: pace.map { PaceText.text(for: $0, now: now) },
                                         paceLevel: pace.map { name(of: $0.level) })
         }
-        let snapshot = WidgetSnapshot(session: limit(session),
-                                      weekly: limit(weekly),
-                                      updated: updated,
-                                      subtitle: subtitle,
-                                      message: message)
+        let snapshot = WidgetSnapshot(accounts: entries.map { entry in
+            WidgetSnapshot.Account(name: entry.name,
+                                   session: limit(entry.session),
+                                   weekly: limit(entry.weekly),
+                                   updated: entry.updated,
+                                   subtitle: entry.subtitle,
+                                   message: entry.message)
+        })
         do {
             let url = WidgetSnapshot.fileURL
             try FileManager.default.createDirectory(at: url.deletingLastPathComponent(),

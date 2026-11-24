@@ -94,29 +94,36 @@ enum ClaudeCodeCredentials {
     }
 }
 
+/// Reads usage for one account. Each account has its own client, so two claude.ai
+/// sign-ins never share a session key or a cookie.
 final class UsageClient {
-    static let shared = UsageClient()
     static let browserUserAgent =
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15"
 
-    private let http: URLSession
-    private lazy var webFetcher = WebFetcher()
-    private var cachedKey: String?
-    private var didLoadKey = false
-
-    private init() {
+    private static let http: URLSession = {
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 20
         config.httpShouldSetCookies = false
         config.httpCookieAcceptPolicy = .never
-        http = URLSession(configuration: config)
+        return URLSession(configuration: config)
+    }()
+
+    /// The Keychain item that holds this account's claude.ai session key.
+    let keychainAccount: String
+    private var http: URLSession { UsageClient.http }
+    private lazy var webFetcher = WebFetcher()
+    private var cachedKey: String?
+    private var didLoadKey = false
+
+    init(keychainAccount: String) {
+        self.keychainAccount = keychainAccount
     }
 
     // MARK: claude.ai session key
 
     var sessionKey: String? {
         if !didLoadKey {
-            cachedKey = Keychain.get(account: "sessionKey")
+            cachedKey = Keychain.get(account: keychainAccount)
             didLoadKey = true
         }
         return cachedKey
@@ -128,14 +135,14 @@ final class UsageClient {
         let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
         cachedKey = trimmed
         didLoadKey = true
-        Keychain.set(trimmed, account: "sessionKey")
+        Keychain.set(trimmed, account: keychainAccount)
         webFetcher.reset()
     }
 
     func clearSessionKey() {
         cachedKey = nil
         didLoadKey = true
-        Keychain.delete(account: "sessionKey")
+        Keychain.delete(account: keychainAccount)
         webFetcher.reset()
     }
 

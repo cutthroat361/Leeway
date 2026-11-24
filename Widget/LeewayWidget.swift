@@ -59,24 +59,23 @@ struct UsageWidgetView: View {
     }
 
     @ViewBuilder private var content: some View {
-        if let snapshot = entry.snapshot, snapshot.session != nil || snapshot.weekly != nil {
-            VStack(alignment: .leading, spacing: family == .systemSmall ? 8 : 10) {
-                header(snapshot)
-                if let session = snapshot.session {
-                    LimitView(label: "Session", limit: session, date: entry.date, compact: family == .systemSmall)
+        if let snapshot = entry.snapshot, snapshot.accounts.contains(where: { $0.hasNumbers }) {
+            if snapshot.accounts.count > 1 {
+                if family == .systemSmall {
+                    smallBoth(snapshot)
+                } else {
+                    mediumBoth(snapshot)
                 }
-                if let weekly = snapshot.weekly {
-                    LimitView(label: "Weekly", limit: weekly, date: entry.date, compact: family == .systemSmall)
-                }
-                Spacer(minLength: 0)
-                footer(snapshot)
+            } else if let account = snapshot.accounts.first {
+                single(account)
             }
         } else {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Claude usage")
                     .font(.system(size: 13, weight: .semibold))
                 Spacer(minLength: 0)
-                Text(entry.snapshot?.message ?? "Open Leeway and sign in to see your limits here.")
+                Text(entry.snapshot?.accounts.compactMap { $0.message }.first
+                     ?? "Open Leeway and sign in to see your limits here.")
                     .font(.system(size: 11))
                     .foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -85,31 +84,131 @@ struct UsageWidgetView: View {
         }
     }
 
-    private func header(_ snapshot: WidgetSnapshot) -> some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text("Claude usage")
-                .font(.system(size: 13, weight: .semibold))
-            Spacer(minLength: 4)
-            if family != .systemSmall && !snapshot.subtitle.isEmpty {
-                Text(snapshot.subtitle)
-                    .font(.system(size: 10))
-                    .foregroundColor(.secondary)
-                    .lineLimit(1)
+    // MARK: One account
+
+    private func single(_ account: WidgetSnapshot.Account) -> some View {
+        VStack(alignment: .leading, spacing: family == .systemSmall ? 8 : 10) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Claude usage")
+                    .font(.system(size: 13, weight: .semibold))
+                Spacer(minLength: 4)
+                if family != .systemSmall && !account.subtitle.isEmpty {
+                    Text(account.subtitle)
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
             }
+            if let session = account.session {
+                LimitView(label: "Session", limit: session, date: entry.date, compact: family == .systemSmall)
+            }
+            if let weekly = account.weekly {
+                LimitView(label: "Weekly", limit: weekly, date: entry.date, compact: family == .systemSmall)
+            }
+            Spacer(minLength: 0)
+            footer(message: account.message, updated: account.updated)
         }
     }
 
-    @ViewBuilder private func footer(_ snapshot: WidgetSnapshot) -> some View {
-        if let message = snapshot.message {
+    // MARK: Two accounts
+
+    /// Each account in its own column, with both limits and their reset times.
+    private func mediumBoth(_ snapshot: WidgetSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 12) {
+                ForEach(Array(snapshot.accounts.enumerated()), id: \.offset) { index, account in
+                    if index > 0 { Divider() }
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(account.name)
+                            .font(.system(size: 13, weight: .semibold))
+                            .lineLimit(1)
+                        if account.hasNumbers {
+                            if let session = account.session {
+                                LimitView(label: "Session", limit: session, date: entry.date, compact: true)
+                            }
+                            if let weekly = account.weekly {
+                                LimitView(label: "Weekly", limit: weekly, date: entry.date, compact: true)
+                            }
+                        } else {
+                            notConnected(account)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                }
+            }
+            Spacer(minLength: 0)
+            footer(message: firstProblem(snapshot), updated: snapshot.latestUpdate)
+        }
+    }
+
+    /// Both accounts stacked, one short bar per limit.
+    private func smallBoth(_ snapshot: WidgetSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            ForEach(Array(snapshot.accounts.enumerated()), id: \.offset) { _, account in
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(account.name)
+                        .font(.system(size: 12, weight: .semibold))
+                        .lineLimit(1)
+                    if account.hasNumbers {
+                        MiniLimitRow(label: "Session", limit: account.session, date: entry.date)
+                        MiniLimitRow(label: "Weekly", limit: account.weekly, date: entry.date)
+                    } else {
+                        notConnected(account)
+                    }
+                }
+            }
+            Spacer(minLength: 0)
+            footer(message: firstProblem(snapshot), updated: snapshot.latestUpdate)
+        }
+    }
+
+    private func notConnected(_ account: WidgetSnapshot.Account) -> some View {
+        Text(account.message ?? "Not signed in yet. Open Leeway's Settings.")
+            .font(.system(size: 9))
+            .foregroundColor(.secondary)
+            .lineLimit(3)
+    }
+
+    /// The first account whose last refresh failed although it has numbers to show.
+    private func firstProblem(_ snapshot: WidgetSnapshot) -> String? {
+        guard let account = snapshot.accounts.first(where: { $0.hasNumbers && $0.message != nil }),
+              let message = account.message else { return nil }
+        return "\(account.name): \(message)"
+    }
+
+    @ViewBuilder private func footer(message: String?, updated: Date?) -> some View {
+        if let message = message {
             Text(message)
                 .font(.system(size: 9))
                 .foregroundColor(.orange)
-                .lineLimit(2)
-        } else if let updated = snapshot.updated {
+                .lineLimit(family == .systemSmall ? 1 : 2)
+        } else if let updated = updated {
             Text("Updated " + WidgetTime.when(updated, now: entry.date))
                 .font(.system(size: 9))
                 .foregroundColor(.secondary)
                 .lineLimit(1)
+        }
+    }
+}
+
+/// One limit in a single line: name, a short bar and the percent.
+struct MiniLimitRow: View {
+    let label: String
+    let limit: WidgetSnapshot.Limit?
+    let date: Date
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Text(label)
+                .font(.system(size: 10))
+                .foregroundColor(.secondary)
+                .frame(width: 42, alignment: .leading)
+            UsageBarView(value: limit?.used ?? 0, marker: limit?.elapsedFraction(at: date))
+                .frame(height: 4)
+            Text(limit.map { "\(Int($0.used.rounded()))%" } ?? "--")
+                .font(Font.system(size: 10, weight: .semibold).monospacedDigit())
+                .foregroundColor(limit.map { WidgetColors.text($0.used) } ?? .secondary)
+                .frame(width: 30, alignment: .trailing)
         }
     }
 }

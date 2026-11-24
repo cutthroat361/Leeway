@@ -4,7 +4,7 @@ import Combine
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let settings = AppSettings.shared
-    private var store: UsageStore!
+    private var model: AccountsModel!
     private var statusItem: NSStatusItem!
     private let popover = NSPopover()
     private var settingsWindow: NSWindow?
@@ -13,27 +13,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var clockTimer: Timer?
     private var updateTimer: Timer?
     private var cancellables = Set<AnyCancellable>()
-    private var activeAuth: AuthMethod = .browser
     private var activeInterval = 0
+    private var widgetSignature = ""
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        store = UsageStore(settings: settings)
-        installMainMenu()
-        Notifier.shared.start()
-
         // First launch: use Claude Code's login if it's already on this Mac.
         let firstLaunch = !settings.hasCompletedSetup
-        if firstLaunch {
-            settings.authMethod = ClaudeCodeCredentials.read() != nil ? .claudeCode : .browser
+        if firstLaunch, let first = settings.accounts.first {
+            let method: AuthMethod = ClaudeCodeCredentials.read() != nil ? .claudeCode : .browser
+            settings.updateAccount(first.id) { $0.authMethod = method }
         }
+
+        model = AccountsModel(settings: settings)
+        installMainMenu()
+        Notifier.shared.start()
 
         installStatusItem()
         statusItem.isVisible = settings.showInMenuBar
         installPopover()
 
-        activeAuth = settings.authMethod
         activeInterval = settings.refreshMinutes
-        store.onChange = { [weak self] in self?.storeDidChange() }
+        widgetSignature = currentWidgetSignature
+        model.onChange = { [weak self] in self?.storeDidChange() }
         settings.objectWillChange
             .sink { [weak self] _ in
                 DispatchQueue.main.async { self?.settingsDidChange() }
@@ -69,13 +70,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         scheduleTimers()
         updateStatusItem()
-        store.refresh()
+        model.refreshAll()
         scheduleUpdateChecks()
 
         if firstLaunch {
             settings.hasCompletedSetup = true
             if settings.alertsEnabled { Notifier.shared.requestPermission() }
-            if settings.authMethod != .claudeCode { openSettings() }
+            if settings.accounts.first?.authMethod != .claudeCode { openSettings() }
         }
     }
 
@@ -91,9 +92,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func installPopover() {
         popover.behavior = .transient
-        let root = PopoverView(store: store,
+        let root = PopoverView(model: model,
                                settings: settings,
-                               onRefresh: { [weak self] in self?.store.refresh() },
+                               onRefresh: { [weak self] in self?.model.refreshAll() },
                                onOpenSettings: { [weak self] in self?.openSettings() },
                                onQuit: { NSApp.terminate(nil) })
         let controller = NSHostingController(rootView: AnyView(root))
@@ -117,14 +118,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         guard let button = statusItem.button else { return }
-        store.now = Date()
+        model.tick()
         fitPopover(force: true)
         NSApp.activate(ignoringOtherApps: true)
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         popover.contentViewController?.view.window?.makeKey()
 
-        let isStale = store.lastUpdated.map { Date().timeIntervalSince($0) > 60 } ?? true
-        if isStale && !store.isLoading { store.refresh() }
+        model.refreshIfStale()
     }
 
     /// macOS 13+ sizes the popover from SwiftUI automatically; older versions need help.
@@ -154,7 +154,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.menu = nil
     }
 
-    @objc private func refreshNow() { store.refresh() }
+    @objc private func refreshNow() { model.refreshAll() }
     @objc private func openSettingsFromMenu() { openSettings() }
     @objc private func quitApp() { NSApp.terminate(nil) }
     @objc private func installUpdateFromMenu() { Updater.shared.installUpdate() }
@@ -192,12 +192,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func updateStatusItem() {
         guard let button = statusItem?.button else { return }
-        StatusRenderer.render(button: button,
-                              session: store.session,
-                              weekly: store.weekly,
-                              settings: settings,
-                              hasError: store.errorMessage != nil,
-                              now: Date())
+        let shown = model.displayed
+        let several = shown.count > 1
+        let items = shown.map { store in
+            StatusRenderer.Item(label: several ? store.account?.initial : nil,
+                                name: several ? store.account?.displayName : nil,
+                                session: store.session,
+                                weekly: store.weekly,
+                                hasError: store.errorMessage != nil)
+        }
+        StatusRenderer.render(button: button, items: items, settings: settings, now: Date())
     }
 
     private func storeDidChange() {
@@ -206,11 +210,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func settingsDidChange() {
-        if settings.authMethod != activeAuth {
-            activeAuth = settings.authMethod
-            store.clear()
-            store.refresh()
+        if currentWidgetSignature != widgetSignature {
+            widgetSignature = currentWidgetSignature
+            model.publishToWidget()
         }
+        if popover.isShown { fitPopover(force: false) }
         if settings.refreshMinutes != activeInterval {
             activeInterval = settings.refreshMinutes
             scheduleTimers()
@@ -251,7 +255,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         refreshTimer?.invalidate()
         let interval = TimeInterval(max(1, settings.refreshMinutes) * 60)
         let refresh = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
-            self?.store.refresh()
+            self?.model.refreshAll()
         }
         refresh.tolerance = interval * 0.1
         RunLoop.main.add(refresh, forMode: .common)
@@ -260,7 +264,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Keeps countdowns and "updated x ago" fresh without hitting the network.
         if clockTimer == nil {
             let clock = Timer(timeInterval: 30, repeats: true) { [weak self] _ in
-                self?.store.now = Date()
+                self?.model.tick()
                 self?.updateStatusItem()
             }
             clock.tolerance = 5
@@ -284,14 +288,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func clockFormatDidChange() {
         DispatchQueue.main.async { [weak self] in
-            self?.store.now = Date()
+            self?.model.tick()
             self?.updateStatusItem()
         }
     }
 
     @objc private func systemDidWake() {
         DispatchQueue.main.asyncAfter(deadline: .now() + 8) { [weak self] in
-            self?.store.refresh()
+            self?.model.refreshAll()
         }
     }
 
@@ -301,11 +305,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         popover.performClose(nil)
         if settingsWindow == nil {
             let actions = SettingsActions(
-                signInWithBrowser: { [weak self] in self?.startBrowserSignIn() },
-                saveSessionKey: { [weak self] key in self?.saveSessionKey(key) },
-                signOut: { [weak self] in self?.signOut() },
-                refresh: { [weak self] in self?.store.refresh() })
-            let view = SettingsView(store: store, settings: settings, actions: actions,
+                signInWithBrowser: { [weak self] id in self?.startBrowserSignIn(for: id) },
+                saveSessionKey: { [weak self] id, key in self?.saveSessionKey(key, for: id) },
+                signOut: { [weak self] id in self?.signOut(id) },
+                refresh: { [weak self] id in self?.model.store(for: id)?.refresh() })
+            let view = SettingsView(model: model, settings: settings, actions: actions,
                                     onHeightChange: { [weak self] height in
                                         DispatchQueue.main.async { self?.fitSettingsWindow(toHeight: height) }
                                     })
@@ -338,11 +342,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.setFrame(window.frameRect(forContentRect: newContent), display: true, animate: window.isVisible)
     }
 
-    private func startBrowserSignIn() {
+    private func startBrowserSignIn(for accountId: String) {
         signInController?.close()
-        let controller = SignInWindowController { [weak self] key in
+        let several = settings.accounts.count > 1
+        let name = settings.account(accountId)?.displayName
+        let title = several && name != nil ? "Sign in to Claude - \(name!)" : "Sign in to Claude"
+        let controller = SignInWindowController(title: title) { [weak self] key in
             guard let self = self else { return }
-            self.saveSessionKey(key)
+            self.saveSessionKey(key, for: accountId)
             DispatchQueue.main.async {
                 self.signInController = nil
                 self.openSettings()
@@ -352,22 +359,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.start()
     }
 
-    private func saveSessionKey(_ key: String) {
+    private func saveSessionKey(_ key: String, for accountId: String) {
         let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        UsageClient.shared.saveSessionKey(trimmed)
-        settings.orgId = ""
-        settings.orgName = ""
+        guard !trimmed.isEmpty, let store = model.store(for: accountId) else { return }
+        store.client.saveSessionKey(trimmed)
+        settings.updateAccount(accountId) { account in
+            account.orgId = ""
+            account.orgName = ""
+        }
         store.clear()
         store.refresh()
     }
 
-    private func signOut() {
-        UsageClient.shared.clearSessionKey()
-        settings.orgId = ""
-        settings.orgName = ""
+    private func signOut(_ accountId: String) {
+        guard let store = model.store(for: accountId) else { return }
+        store.client.clearSessionKey()
+        settings.updateAccount(accountId) { account in
+            account.orgId = ""
+            account.orgName = ""
+        }
+        // Sign-ins before Leeway 1.4 also left cookies in WebKit's shared store.
         WebData.clearClaudeData {}
         store.clear()
+    }
+
+    /// Changes whenever the widget should show something else.
+    private var currentWidgetSignature: String {
+        settings.widgetShows + "|" + settings.accounts.map { "\($0.id)=\($0.displayName)" }.joined(separator: ",")
     }
 
     // MARK: Main menu

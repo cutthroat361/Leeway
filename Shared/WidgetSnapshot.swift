@@ -23,14 +23,58 @@ struct WidgetSnapshot: Codable {
         }
     }
 
-    var session: Limit?
-    var weekly: Limit?
-    /// When the numbers were last fetched successfully.
-    var updated: Date?
-    /// Organization or account name.
-    var subtitle: String
-    /// Set when the last refresh failed, for example after a sign-in expired.
-    var message: String?
+    /// One account's numbers.
+    struct Account: Codable {
+        var name: String
+        var session: Limit?
+        var weekly: Limit?
+        /// When the numbers were last fetched successfully.
+        var updated: Date?
+        /// Organization or login name.
+        var subtitle: String
+        /// Set when the last refresh failed, for example after a sign-in expired.
+        var message: String?
+
+        var hasNumbers: Bool { session != nil || weekly != nil }
+    }
+
+    /// The accounts chosen for the widget in Leeway's Settings, in order.
+    var accounts: [Account]
+
+    init(accounts: [Account]) {
+        self.accounts = accounts
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case accounts
+        // The one-account format written before Leeway 1.4.
+        case session, weekly, updated, subtitle, message
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        if let accounts = try container.decodeIfPresent([Account].self, forKey: .accounts) {
+            self.accounts = accounts
+            return
+        }
+        let single = Account(name: "",
+                             session: try container.decodeIfPresent(Limit.self, forKey: .session),
+                             weekly: try container.decodeIfPresent(Limit.self, forKey: .weekly),
+                             updated: try container.decodeIfPresent(Date.self, forKey: .updated),
+                             subtitle: try container.decodeIfPresent(String.self, forKey: .subtitle) ?? "",
+                             message: try container.decodeIfPresent(String.self, forKey: .message))
+        self.accounts = [single]
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(accounts, forKey: .accounts)
+    }
+
+    /// When any of the accounts was last updated.
+    var latestUpdate: Date? {
+        accounts.compactMap { $0.updated }.max()
+    }
 
     static let fileName = "widget.json"
 
@@ -55,13 +99,14 @@ struct WidgetSnapshot: Codable {
     /// Shown in the widget gallery before Leeway has any numbers.
     static var sample: WidgetSnapshot {
         let now = Date()
-        return WidgetSnapshot(
+        return WidgetSnapshot(accounts: [Account(
+            name: "",
             session: Limit(used: 42, resetsAt: now.addingTimeInterval(2.5 * 3600), length: 5 * 3600,
                            paceText: "On pace", paceLevel: "steady"),
             weekly: Limit(used: 28, resetsAt: now.addingTimeInterval(4 * 86400), length: 7 * 86400,
                           paceText: "Plenty left", paceLevel: "relaxed"),
             updated: now,
             subtitle: "",
-            message: nil)
+            message: nil)])
     }
 }

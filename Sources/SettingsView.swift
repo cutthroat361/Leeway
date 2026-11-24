@@ -1,11 +1,12 @@
 import AppKit
 import SwiftUI
 
+/// What Settings can ask the app to do, each for one account (by id).
 struct SettingsActions {
-    let signInWithBrowser: () -> Void
-    let saveSessionKey: (String) -> Void
-    let signOut: () -> Void
-    let refresh: () -> Void
+    let signInWithBrowser: (String) -> Void
+    let saveSessionKey: (String, String) -> Void
+    let signOut: (String) -> Void
+    let refresh: (String) -> Void
 }
 
 enum SettingsTab: String, CaseIterable, Identifiable {
@@ -27,7 +28,7 @@ private struct SettingsHeightKey: PreferenceKey {
 struct SettingsView: View {
     static let width: CGFloat = 560
 
-    @ObservedObject var store: UsageStore
+    @ObservedObject var model: AccountsModel
     @ObservedObject var settings: AppSettings
     let actions: SettingsActions
     /// Called with the height the window's content needs for the selected tab.
@@ -74,10 +75,10 @@ struct SettingsView: View {
 
     @ViewBuilder private var selectedTab: some View {
         switch tab {
-        case .account: AccountTab(store: store, settings: settings, actions: actions)
+        case .account: AccountTab(model: model, settings: settings, actions: actions)
         case .menuBar: MenuBarTab(settings: settings)
         case .alerts: AlertsTab(settings: settings)
-        case .general: GeneralTab(store: store, settings: settings)
+        case .general: GeneralTab(model: model, settings: settings)
         }
     }
 
@@ -103,12 +104,17 @@ struct SettingsView: View {
 // MARK: Account
 
 struct AccountTab: View {
-    @ObservedObject var store: UsageStore
+    @ObservedObject var model: AccountsModel
     @ObservedObject var settings: AppSettings
     let actions: SettingsActions
 
     // View state is declared without the @State attribute on purpose: newer Apple
     // command line tools treat @State as a macro whose plugin only ships with Xcode.
+    private let _selected = State<String>(initialValue: "")
+    private var selected: String {
+        get { _selected.wrappedValue }
+        nonmutating set { _selected.wrappedValue = newValue }
+    }
     private let _keyInput = State<String>(initialValue: "")
     private var keyInput: String {
         get { _keyInput.wrappedValue }
@@ -125,39 +131,101 @@ struct AccountTab: View {
         nonmutating set { _showKeySteps.wrappedValue = newValue }
     }
 
+    /// The account being edited: the one picked above, or the first.
+    private var accountId: String {
+        settings.account(selected) != nil ? selected : (settings.accounts.first?.id ?? "")
+    }
+    private var account: Account? { settings.account(accountId) }
+    private var store: UsageStore? { model.store(for: accountId) }
+    private var hasKey: Bool { store?.client.hasSessionKey ?? false }
+    private var several: Bool { settings.accounts.count > 1 }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("How should Leeway read your usage?")
-                .font(.system(size: 13, weight: .semibold))
-            Picker("Sign-in method", selection: $settings.authMethod) {
-                ForEach(AuthMethod.allCases) { method in
-                    Text(method.title).tag(method)
+            accountRow
+            if let account = account {
+                Text(several ? "How should Leeway read \(account.displayName)'s usage?" : "How should Leeway read your usage?")
+                    .font(.system(size: 13, weight: .semibold))
+                Picker("Sign-in method", selection: Binding(
+                    get: { account.authMethod },
+                    set: { method in settings.updateAccount(accountId) { $0.authMethod = method } })) {
+                    ForEach(AuthMethod.allCases) { method in
+                        Text(method.title).tag(method)
+                    }
                 }
-            }
-            .pickerStyle(RadioGroupPickerStyle())
-            .labelsHidden()
+                .pickerStyle(RadioGroupPickerStyle())
+                .labelsHidden()
 
-            GroupBox {
-                VStack(alignment: .leading, spacing: 10) {
-                    methodDetail
-                    organizationPicker
+                GroupBox {
+                    VStack(alignment: .leading, spacing: 10) {
+                        methodDetail(account)
+                        organizationPicker(account)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(8)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(8)
-            }
 
-            connectionStatus
+                connectionStatus
+            }
         }
         .onAppear {
             checkClaudeCode()
-            if settings.authMethod.usesWebSession && UsageClient.shared.hasSessionKey {
-                store.loadOrganizations()
+            loadOrganizationsIfSignedIn()
+        }
+    }
+
+    /// Pick an account, name it, add a second one or remove one.
+    private var accountRow: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                if several {
+                    Picker("Account", selection: Binding(
+                        get: { accountId },
+                        set: { id in
+                            selected = id
+                            keyInput = ""
+                            showKeySteps = false
+                            DispatchQueue.main.async { loadOrganizationsIfSignedIn() }
+                        })) {
+                        ForEach(settings.accounts) { account in
+                            Text(account.displayName).tag(account.id)
+                        }
+                    }
+                    .pickerStyle(SegmentedPickerStyle())
+                    .labelsHidden()
+                    .fixedSize()
+                }
+                Spacer()
+                if settings.accounts.count < AppSettings.maxAccounts {
+                    Button("Add a second account") {
+                        if let added = settings.addAccount() {
+                            selected = added.id
+                            keyInput = ""
+                        }
+                    }
+                    .help("Watch another Claude account, for example your work account next to your personal one")
+                }
+                if several {
+                    Button("Remove…") { confirmRemove() }
+                }
+            }
+            if several {
+                HStack(spacing: 8) {
+                    Text("Name")
+                    TextField("Personal", text: Binding(
+                        get: { account?.name ?? "" },
+                        set: { name in settings.updateAccount(accountId) { $0.name = String(name.prefix(24)) } }))
+                        .frame(width: 180)
+                    Text("Shown in the menu bar as its first letter.")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                }
             }
         }
     }
 
-    @ViewBuilder private var methodDetail: some View {
-        switch settings.authMethod {
+    @ViewBuilder private func methodDetail(_ account: Account) -> some View {
+        switch account.authMethod {
         case .claudeCode:
             Text("Reads the login Claude Code saved on this Mac, so there's nothing to type. It follows whichever account Claude Code is signed in to.")
                 .fixedSize(horizontal: false, vertical: true)
@@ -169,18 +237,25 @@ struct AccountTab: View {
                 Text("Claude Code login found on this Mac.")
                     .foregroundColor(.green)
             }
+            if settings.accounts.filter({ $0.authMethod == .claudeCode }).count > 1 {
+                Text("Both accounts use the Claude Code login, so they show the same numbers. Sign the other one in with a claude.ai window instead.")
+                    .foregroundColor(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             Button("Check again") {
                 checkClaudeCode()
-                actions.refresh()
+                actions.refresh(accountId)
             }
 
         case .browser:
-            Text("Opens claude.ai's sign-in page in a small window. Once you're in, Leeway keeps the session in your macOS Keychain and closes the window.")
+            Text(several
+                 ? "Opens claude.ai's sign-in page in a small window. Sign in with this account's email. Leeway keeps the session in your macOS Keychain and closes the window. Your other account stays signed in."
+                 : "Opens claude.ai's sign-in page in a small window. Once you're in, Leeway keeps the session in your macOS Keychain and closes the window.")
                 .fixedSize(horizontal: false, vertical: true)
             HStack {
-                Button(signInTitle, action: actions.signInWithBrowser)
-                if UsageClient.shared.hasSessionKey {
-                    Button("Sign out", action: actions.signOut)
+                Button(hasKey ? "Sign in again" : "Sign in to Claude") { actions.signInWithBrowser(accountId) }
+                if hasKey {
+                    Button("Sign out") { actions.signOut(accountId) }
                 }
             }
 
@@ -190,12 +265,12 @@ struct AccountTab: View {
             HStack {
                 SecureField("sk-ant-sid01-…", text: _keyInput.projectedValue)
                 Button("Save key") {
-                    actions.saveSessionKey(keyInput)
+                    actions.saveSessionKey(accountId, keyInput)
                     keyInput = ""
                 }
                 .disabled(keyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
-            Button(keyStepsTitle) {
+            Button(showKeySteps ? "Hide the steps" : "Where do I find it?") {
                 showKeySteps.toggle()
             }
             .buttonStyle(LinkButtonStyle())
@@ -205,17 +280,17 @@ struct AccountTab: View {
                     .foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            if UsageClient.shared.hasSessionKey {
-                Button("Remove saved key", action: actions.signOut)
+            if hasKey {
+                Button("Remove saved key") { actions.signOut(accountId) }
             }
         }
     }
 
-    @ViewBuilder private var organizationPicker: some View {
-        if settings.authMethod.usesWebSession && UsageClient.shared.hasSessionKey {
+    @ViewBuilder private func organizationPicker(_ account: Account) -> some View {
+        if account.authMethod.usesWebSession && hasKey, let store = store {
             if store.organizations.count > 1 {
                 Picker("Organization", selection: Binding(
-                    get: { settings.orgId },
+                    get: { account.orgId },
                     set: { newId in
                         if let org = store.organizations.first(where: { $0.id == newId }) {
                             store.selectOrganization(org)
@@ -226,34 +301,46 @@ struct AccountTab: View {
                     }
                 }
                 .frame(maxWidth: 360)
-            } else if !settings.orgName.isEmpty {
-                Text("Organization: \(settings.orgName)")
+            } else if !account.orgName.isEmpty {
+                Text("Organization: \(account.orgName)")
                     .foregroundColor(.secondary)
             }
         }
     }
 
     @ViewBuilder private var connectionStatus: some View {
-        if let error = store.errorMessage {
-            Label(error, systemImage: "exclamationmark.triangle.fill")
-                .foregroundColor(.orange)
-                .fixedSize(horizontal: false, vertical: true)
-        } else if store.isLoading {
-            Text("Connecting…")
-                .foregroundColor(.secondary)
-        } else if store.lastUpdated != nil {
-            Label("Connected. \(TextFormat.updatedAgo(store.lastUpdated, now: Date())).",
-                  systemImage: "checkmark.circle.fill")
-                .foregroundColor(.green)
+        if let store = store {
+            if let error = store.errorMessage {
+                Label(error, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundColor(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if store.isLoading {
+                Text("Connecting…")
+                    .foregroundColor(.secondary)
+            } else if store.lastUpdated != nil {
+                Label("Connected. \(TextFormat.updatedAgo(store.lastUpdated, now: Date())).",
+                      systemImage: "checkmark.circle.fill")
+                    .foregroundColor(.green)
+            }
         }
     }
 
-    private var signInTitle: String {
-        UsageClient.shared.hasSessionKey ? "Sign in again" : "Sign in to Claude"
+    private func loadOrganizationsIfSignedIn() {
+        if let account = account, account.authMethod.usesWebSession, hasKey {
+            store?.loadOrganizations()
+        }
     }
 
-    private var keyStepsTitle: String {
-        showKeySteps ? "Hide the steps" : "Where do I find it?"
+    private func confirmRemove() {
+        guard let account = account else { return }
+        let alert = NSAlert()
+        alert.messageText = "Remove \(account.displayName)?"
+        alert.informativeText = "Leeway forgets this account's sign-in and its usage history. Your Claude account itself isn't changed."
+        alert.addButton(withTitle: "Remove")
+        alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        settings.removeAccount(account.id)
+        selected = settings.accounts.first?.id ?? ""
     }
 
     private func checkClaudeCode() {
@@ -282,6 +369,9 @@ struct MenuBarTab: View {
             VStack(alignment: .leading, spacing: 14) {
                 Text("What should the menu bar show?")
                     .font(.system(size: 13, weight: .semibold))
+                if settings.accounts.count > 1 {
+                    accountChoice("Accounts", selection: $settings.display)
+                }
                 Picker("Menu bar style", selection: $settings.barStyle) {
                     ForEach(BarStyle.allCases) { style in
                         Text("\(style.title)   \(style.example)").tag(style)
@@ -298,14 +388,33 @@ struct MenuBarTab: View {
 
             Divider()
 
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 8) {
                 Text("Widget")
                     .font(.system(size: 13, weight: .semibold))
+                if settings.accounts.count > 1 {
+                    accountChoice("The widget shows", selection: $settings.widgetShows)
+                }
                 Text(MenuBarTab.widgetHelp)
                     .font(.system(size: 11))
                     .foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+        }
+    }
+
+    /// Both accounts, or one of them.
+    private func accountChoice(_ title: String, selection: Binding<String>) -> some View {
+        HStack(spacing: 10) {
+            Text(title)
+            Picker(title, selection: selection) {
+                Text("Both").tag(DisplayChoice.both)
+                ForEach(settings.accounts) { account in
+                    Text(account.displayName).tag(account.id)
+                }
+            }
+            .pickerStyle(SegmentedPickerStyle())
+            .labelsHidden()
+            .fixedSize()
         }
     }
 
@@ -397,7 +506,7 @@ extension AlertsTab {
 // MARK: General
 
 struct GeneralTab: View {
-    @ObservedObject var store: UsageStore
+    @ObservedObject var model: AccountsModel
     @ObservedObject var settings: AppSettings
     @ObservedObject var updater: Updater = Updater.shared
 
@@ -441,7 +550,7 @@ struct GeneralTab: View {
             }
 
             Button("Clear usage history") {
-                store.clearHistory()
+                model.clearAllHistory()
             }
 
             Divider()

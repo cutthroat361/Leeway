@@ -66,8 +66,16 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     }
 
     /// Called after every successful refresh. Each alert fires once per limit window.
-    func evaluate(session: UsageWindow?, weekly: UsageWindow?, settings: AppSettings, now: Date = Date()) {
+    /// `accountName` is put in front of each title when Leeway watches several accounts.
+    func evaluate(session: UsageWindow?, weekly: UsageWindow?, settings: AppSettings,
+                  accountId: String = Account.primaryId, accountName: String? = nil, now: Date = Date()) {
         let defaults = UserDefaults.standard
+        // The first account keeps the keys from before Leeway had several accounts.
+        let prefix = accountId == Account.primaryId ? "" : "\(accountId)."
+        let lastSessionKey = prefix + self.lastSessionKey
+        func post(title: String, body: String) {
+            self.post(title: accountName.map { "\($0): \(title)" } ?? title, body: body)
+        }
         var fired = (defaults.dictionary(forKey: firedKey) as? [String: Double]) ?? [:]
         let cutoff = now.addingTimeInterval(-9 * 86400).timeIntervalSince1970
         fired = fired.filter { $0.value > cutoff }
@@ -82,10 +90,10 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
             for window in watched {
                 let period = periodKey(window)
                 let crossed = thresholds.filter { window.utilization >= Double($0) }
-                let fresh = crossed.filter { fired["\(window.id).\($0).\(period)"] == nil }
+                let fresh = crossed.filter { fired["\(prefix)\(window.id).\($0).\(period)"] == nil }
                 guard let top = fresh.max() else { continue }
                 for threshold in fresh {
-                    fired["\(window.id).\(threshold).\(period)"] = now.timeIntervalSince1970
+                    fired["\(prefix)\(window.id).\(threshold).\(period)"] = now.timeIntervalSince1970
                 }
                 let title = top >= 100
                     ? "\(window.title): limit reached"
@@ -101,7 +109,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
                           let reset = window.resetsAt,
                           pace.elapsedFraction >= 0.1,
                           window.utilization >= 15 else { continue }
-                    let key = "\(window.id).pace.\(periodKey(window))"
+                    let key = "\(prefix)\(window.id).pace.\(periodKey(window))"
                     guard fired[key] == nil else { continue }
                     fired[key] = now.timeIntervalSince1970
                     let limitName = window.id == "five_hour" ? "session limit" : "weekly limit"
@@ -113,7 +121,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
             if settings.notifyOnReset, let current = session,
                let previous = defaults.object(forKey: lastSessionKey) as? Double,
                previous >= 90, current.utilization < 20 {
-                post(title: "Your Claude session has reset",
+                post(title: accountName == nil ? "Your Claude session has reset" : "Session has reset",
                      body: "You have \(TextFormat.percent(current.left)) of your session limit available again.")
             }
         }

@@ -15,7 +15,7 @@ enum UsageColors {
 }
 
 struct PopoverView: View {
-    @ObservedObject var store: UsageStore
+    @ObservedObject var model: AccountsModel
     @ObservedObject var settings: AppSettings
     @ObservedObject var updater: Updater = Updater.shared
     let onRefresh: () -> Void
@@ -29,22 +29,29 @@ struct PopoverView: View {
         get { _range.wrappedValue }
         nonmutating set { _range.wrappedValue = newValue }
     }
+    private let _historyAccount = State<String>(initialValue: "")
+    private var historyAccount: String {
+        get { _historyAccount.wrappedValue }
+        nonmutating set { _historyAccount.wrappedValue = newValue }
+    }
+
+    private var shown: [UsageStore] { model.displayed }
+    private var now: Date { model.stores.first?.now ?? Date() }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             header
-            updateBanner
-            if let message = store.errorMessage {
-                errorBanner(message)
+            if settings.accounts.count > 1 {
+                displayPicker
             }
-            if store.windows.isEmpty {
-                emptyState
-            } else {
-                ForEach(store.visibleWindows) { window in
-                    WindowRow(window: window, now: store.now)
-                }
+            updateBanner
+            ForEach(Array(shown.enumerated()), id: \.element.accountId) { index, store in
+                if index > 0 { Divider() }
+                accountSection(store, showName: shown.count > 1)
+            }
+            if let store = historyStore, !store.windows.isEmpty {
                 Divider()
-                historySection
+                historySection(store)
             }
             Divider()
             footer
@@ -53,17 +60,12 @@ struct PopoverView: View {
         .frame(width: 340)
     }
 
-    private var subtitle: String {
-        if settings.authMethod == .claudeCode { return store.sourceLabel }
-        return settings.orgName
-    }
-
     private var header: some View {
         HStack(alignment: .center) {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Claude usage")
                     .font(.system(size: 14, weight: .semibold))
-                if !subtitle.isEmpty {
+                if shown.count == 1, let subtitle = shown.first?.subtitle, !subtitle.isEmpty {
                     Text(subtitle)
                         .font(.system(size: 11))
                         .foregroundColor(.secondary)
@@ -71,7 +73,7 @@ struct PopoverView: View {
                 }
             }
             Spacer()
-            if store.isLoading {
+            if model.isLoading {
                 HStack(spacing: 6) {
                     ProgressView()
                         .controlSize(.small)
@@ -91,6 +93,54 @@ struct PopoverView: View {
                 .help("Get the latest numbers from Claude now")
             }
         }
+    }
+
+    /// Both accounts, or just one. The menu bar follows the same choice.
+    private var displayPicker: some View {
+        Picker("Show", selection: $settings.display) {
+            Text("Both").tag(DisplayChoice.both)
+            ForEach(settings.accounts) { account in
+                Text(account.displayName).tag(account.id)
+            }
+        }
+        .pickerStyle(SegmentedPickerStyle())
+        .labelsHidden()
+        .help("Choose what the popover and the menu bar show")
+    }
+
+    private func accountSection(_ store: UsageStore, showName: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if showName, let account = store.account {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(account.displayName)
+                        .font(.system(size: 13, weight: .semibold))
+                    if !store.subtitle.isEmpty {
+                        Text(store.subtitle)
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
+                }
+            }
+            if let message = store.errorMessage {
+                errorBanner(message, needsSignIn: store.needsSignIn)
+            }
+            if store.windows.isEmpty {
+                emptyState(store)
+            } else {
+                ForEach(store.visibleWindows) { window in
+                    WindowRow(window: window, now: store.now)
+                }
+            }
+        }
+    }
+
+    /// The account whose history the chart shows.
+    private var historyStore: UsageStore? {
+        if shown.count == 1 { return shown.first }
+        return shown.first { $0.accountId == historyAccount && !$0.windows.isEmpty }
+            ?? shown.first { !$0.windows.isEmpty }
     }
 
     /// Shown only while a new version is available or being installed.
@@ -134,7 +184,7 @@ struct PopoverView: View {
         }
     }
 
-    private func errorBanner(_ message: String) -> some View {
+    private func errorBanner(_ message: String, needsSignIn: Bool) -> some View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundColor(.orange)
@@ -142,7 +192,7 @@ struct PopoverView: View {
                 Text(message)
                     .font(.system(size: 12))
                     .fixedSize(horizontal: false, vertical: true)
-                if store.needsSignIn {
+                if needsSignIn {
                     Button("Open Settings", action: onOpenSettings)
                         .controlSize(.small)
                 }
@@ -153,14 +203,16 @@ struct PopoverView: View {
         .background(RoundedRectangle(cornerRadius: 8).fill(Color.orange.opacity(0.12)))
     }
 
-    @ViewBuilder private var emptyState: some View {
+    @ViewBuilder private func emptyState(_ store: UsageStore) -> some View {
         if store.isLoading {
             Text("Checking your usage…")
                 .font(.system(size: 12))
                 .foregroundColor(.secondary)
         } else if store.errorMessage == nil {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Connect your Claude account to see your limits here.")
+                Text(settings.accounts.count > 1
+                     ? "Connect this account to see its limits here."
+                     : "Connect your Claude account to see your limits here.")
                     .font(.system(size: 12))
                     .fixedSize(horizontal: false, vertical: true)
                 Button("Connect account", action: onOpenSettings)
@@ -168,11 +220,25 @@ struct PopoverView: View {
         }
     }
 
-    private var historySection: some View {
+    private func historySection(_ store: UsageStore) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("History")
-                    .font(.system(size: 12, weight: .semibold))
+            HStack(spacing: 8) {
+                if shown.count > 1 {
+                    Picker("History for", selection: Binding(
+                        get: { store.accountId },
+                        set: { historyAccount = $0 })) {
+                        ForEach(shown.filter { !$0.windows.isEmpty }, id: \.accountId) { option in
+                            Text(option.account?.displayName ?? "Account").tag(option.accountId)
+                        }
+                    }
+                    .pickerStyle(MenuPickerStyle())
+                    .labelsHidden()
+                    .fixedSize()
+                    .help("Whose history the chart shows")
+                } else {
+                    Text("History")
+                        .font(.system(size: 12, weight: .semibold))
+                }
                 Spacer()
                 Picker("History range", selection: _range.projectedValue) {
                     ForEach(HistoryRange.allCases) { option in
@@ -205,7 +271,7 @@ struct PopoverView: View {
 
     private var footer: some View {
         HStack {
-            Text("Leeway \(AppInfo.version) · \(TextFormat.updatedAgo(store.lastUpdated, now: store.now))")
+            Text("Leeway \(AppInfo.version) · \(TextFormat.updatedAgo(shown.compactMap { $0.lastUpdated }.max(), now: now))")
                 .font(.system(size: 11))
                 .lineLimit(1)
                 .foregroundColor(.secondary)
