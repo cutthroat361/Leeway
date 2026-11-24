@@ -33,7 +33,7 @@ Runs on macOS 11 Big Sur and newer, on both Apple Silicon and Intel Macs (one un
 **Widget** (small and medium)
 
 <p align="center">
-  <img src="docs/screenshots/widget-small.png" width="220" alt="Small Leeway widget: session 0% and weekly 4% used, with pace ticks and reset times">
+  <img src="docs/screenshots/widget-small.png" width="214" alt="Small Leeway widget: session 0% used, starts on next use; weekly 4% used with a pace tick and reset time">
   <img src="docs/screenshots/widget-medium.png" width="415" alt="Medium Leeway widget: session and weekly bars with reset times and pace, such as Plenty left">
 </p>
 
