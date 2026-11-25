@@ -66,7 +66,9 @@ enum StatusRenderer {
         }
 
         if leadingSpace { add(" ") }
-        if let label = item.label { add(label + " ", quiet: true, bold: true) }
+        // The account letter and words like "left" use the normal menu bar color: the
+        // secondary color is too faint on the translucent menu bar. Bold sets the letter apart.
+        if let label = item.label { add(label + " ", bold: true) }
 
         switch style {
         case .bothUsed, .bothLeft:
@@ -76,12 +78,12 @@ enum StatusRenderer {
             add(first.text, used: first.used)
             add(" | ", quiet: true)
             add(second.text, used: second.used)
-            if showLeft { add(" left", quiet: true) }
+            if showLeft { add(" left") }
         case .sessionReset:
             let first = value(session, left: false)
             add(first.text, used: first.used)
             if let reset = session?.resetsAt, reset > now {
-                add(" ↻ " + TextFormat.countdown(to: reset, now: now), quiet: true)
+                add(" ↻ " + TextFormat.countdown(to: reset, now: now))
             }
         case .sessionOnly:
             let first = value(session, left: false)
